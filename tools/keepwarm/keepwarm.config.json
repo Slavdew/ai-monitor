@@ -1,0 +1,5 @@
+{
+  "workdayHours": 9,
+  "startWindow": ["07:00", "11:00"],
+  "offDays": [6, 0]
+}
