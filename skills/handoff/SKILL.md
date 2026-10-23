@@ -42,7 +42,8 @@ argument-hint: "[путь к HANDOFF.md или каталогу задачи] [�
    Захваты на доске сессий, очередь ИБ — снять или записать в «Живое».
 2. **Собрать факты командами, не по памяти:** `git status --short`, `git log --oneline -1`,
    `git log --oneline @{u}..` (что не отправлено), `ListAgents` (соседи), запущенные процессы и
-   фоновые агенты этой сессии, worktree агентов (`git worktree list`).
+   фоновые агенты этой сессии, worktree агентов (`git worktree list`); для шапки —
+   `$env:CLAUDE_CODE_SESSION_ID` и `Get-Date -Format "yyyy-MM-ddTHH:mmzzz"`.
 3. **Обновить HANDOFF.md** по шаблону: каждый раздел заменить, не дописать. Старое содержимое
    раздела — в журнал, если оно ещё правда и ценно, иначе выбросить.
 4. **Дописать журнал**: одна запись за сессию (дата, имя сессии из `ListAgents`), метки
@@ -60,19 +61,22 @@ argument-hint: "[путь к HANDOFF.md или каталогу задачи] [�
 
 ````markdown
 ---
-task: dpishell            # * номер/имя задачи; подзадача — через родителя: 123456/2
+task: dpishell            # * стабильный id: номер CRM или slug, как в task.json монитора; не переименовывать
+title: DpiShell — выпуск беты   # человеческое название, можно менять
 project: DpiShell         # * группа в мониторе задач
 status: active            # * active | blocked | waiting-owner | done
-updated: 2026-10-24 18:40 # * локальное время
+updated: 2026-10-24T18:40+03:00   # * ISO 8601 со смещением: Get-Date -Format "yyyy-MM-ddTHH:mmzzz"
 anchor: b8b5184           # * коммит, на который опирается текст; «что изменилось» = git log b8b5184..HEAD
 branch: master            # * ветка или detached
 next: выпуск роутера 0.2.3 после «да» владельца   # * одна строка
 resume: Продолжаем работу по <dev>\dpishell-private\docs\HANDOFF.md   # * команда для новой сессии
-session: ai-e4            # имя сдающей сессии
+session: d4415633-3725-45b4-a694-f54023a0fde6   # sessionId сдающей сессии: $env:CLAUDE_CODE_SESSION_ID
 timers: нет               # таймеры, которые должны пережить сессию, или «нет»
 journal: STATUS.md        # если журнал называется не JOURNAL.md
 spec: openspec/changes/tz-…   # журнал ТЗ, если есть
 infobase: n/a             # ИБ, что задеплоено и что нет — если работа с базой
+# status — только здесь, в task.json монитора его нет. Связи задач (parent/related/blocks) —
+# в task.json, не в шапку.
 ---
 
 # <Задача> — передача
