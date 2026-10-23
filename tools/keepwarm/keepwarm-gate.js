@@ -24,8 +24,8 @@ const STATE_DIR = path.join(process.env.LOCALAPPDATA || '', 'keepwarm');
 const DAY_START = path.join(STATE_DIR, 'day-start');   // сегодняшний день: начало, конец от пользователя
 const CONFIG = process.env.KEEPWARM_CONFIG || path.join(__dirname, 'keepwarm.config.json');
 // имя файла handoff задаёт хук: скиллу не нужен отдельный вызов за временем
-const TASK_DIR = 'файл "<AI_ROOT>\\tasks\\<номер> <тема>\\{FILE}"';
-const DEBUG_DIR = 'файл "<AI_ROOT>\\tools\\keepwarm\\debug\\{FILE}" (отладка)';
+const TASK_DIR = 'каталог "<AI_ROOT>\\tasks\\<номер> <тема>"';
+const DEBUG_DIR = 'каталог "<AI_ROOT>\\tools\\keepwarm\\debug\\{FILE}" (отладка)';
 const UNTIMER = 'сними таймер keepwarm этой сессии: CronDelete по ID из ответа CronCreate (ID не ' +
   'найти — CronList).';
 
@@ -34,9 +34,8 @@ const PING = 'keepwarm-gate: пинг поддержания кэша. Отве�
 const HANDOFF = 'keepwarm-gate: поддержание кэша закончено, пользователь молчит {N} мин. ' +
   `Сначала ${UNTIMER} Если работа по задаче в этой сессии не завершена — подготовь handoff на ` +
   'следующую сессию: скилл handoff, аргумент — {DIR} (путь в кавычках) и фокус — чем занималась ' +
-  'сессия, одной фразой; задачи нет — файл "<AI_ROOT>\\work\\handoffs\\{FILE}". Вопросов не ' +
-  'задавай. Документ и итоговое сообщение — по правилу C:\\Users\\v.pletnev\\.claude\\rules\\' +
-  'handoff-message.md: причина — «{REASON}», кэш остынет около {COLD}. Работа завершена — handoff ' +
+  'сессия, одной фразой; задачи нет — каталог "<AI_ROOT>\\work\\handoffs\\<тема>". Вопросов не ' +
+  'задавай. В итоговом сообщении скилла причина — «{REASON}», кэш остынет около {COLD}. Работа завершена — handoff ' +
   'не нужен, ответь одной строкой.\n';
 const STOP = `keepwarm-gate: поддержание кэша закончено. ${UNTIMER} Handoff не нужен. Ответь ` +
   'ровно одной строкой «⏹ Поддержание кэша завершено».\n';
@@ -241,7 +240,7 @@ function gate(data) {
       process.stdout.write(prompt.includes('без handoff') ? STOP : HANDOFF
         .replace('{N}', String(Math.floor(idle)))
         .replace('{DIR}', debug ? DEBUG_DIR : TASK_DIR)
-        .replaceAll('{FILE}', `handoff-${fileStamp(started)}.md`)
+        .replaceAll('{FILE}', fileStamp(started))
         .replace('{REASON}', why)
         .replace('{COLD}', hhmm(started + 3600000)));   // кэш живёт час
       return;
