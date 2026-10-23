@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Handoff и compact</title>
+<style>
+:root {
+  --bg: #f6f5f1; --surface: #ffffff; --surface-2: #efede6; --text: #1f1e1b; --muted: #6b6860;
+  --line: #dcd8cd; --accent: #2f5d8a; --accent-soft: #e3ecf5;
+  --good: #2e7d4f; --good-soft: #e2f1e7; --bad: #b0413e; --bad-soft: #f6e3e2;
+  --warn: #9a6a12; --warn-soft: #f6ecd6; --code-bg: #f1efe8;
+  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181a; --surface: #202225; --surface-2: #2a2c30; --text: #e7e5df; --muted: #9b988f;
+    --line: #36383d; --accent: #7fb0e0; --accent-soft: #23344a;
+    --good: #6cc792; --good-soft: #1f3529; --bad: #e88a86; --bad-soft: #3d2423;
+    --warn: #e0b45c; --warn-soft: #3a3020; --code-bg: #1b1c1f;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17181a; --surface: #202225; --surface-2: #2a2c30; --text: #e7e5df; --muted: #9b988f;
+  --line: #36383d; --accent: #7fb0e0; --accent-soft: #23344a;
+  --good: #6cc792; --good-soft: #1f3529; --bad: #e88a86; --bad-soft: #3d2423;
+  --warn: #e0b45c; --warn-soft: #3a3020; --code-bg: #1b1c1f;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 32px 16px 80px; }
+h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+h2 { font-size: 20px; margin: 48px 0 6px; padding-top: 8px; }
+h3 { font-size: 15px; margin: 0 0 6px; }
+p { margin: 6px 0; }
+.lead { color: var(--muted); margin-bottom: 18px; }
+.muted { color: var(--muted); }
+code, pre { font-family: var(--mono); font-size: 13px; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 14px; margin: 8px 0 0; overflow-x: auto; white-space: pre; line-height: 1.5; }
+nav { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line);
+  margin: 0 -16px; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+nav a { color: var(--muted); text-decoration: none; }
+nav a:hover { color: var(--accent); }
+.grid { display: grid; gap: 12px; }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  padding: 2px 7px; border-radius: 4px; background: var(--surface-2); color: var(--muted); }
+.tag.good { background: var(--good-soft); color: var(--good); }
+.tag.bad { background: var(--bad-soft); color: var(--bad); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.tag.acc { background: var(--accent-soft); color: var(--accent); }
+.files .card h3 { font-family: var(--mono); font-size: 13px; word-break: break-all; }
+.layer { border-top: 4px solid var(--accent); }
+.layer.l2 { border-top-color: var(--good); }
+.layer.l3 { border-top-color: var(--warn); }
+.layer.l4 { border-top-color: var(--muted); }
+.layer dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; }
+.layer dt { color: var(--muted); }
+.layer dd { margin: 0; }
+.ba { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.ba > div { min-width: 0; }
+.ba pre { margin-top: 4px; font-size: 12px; white-space: pre-wrap; }
+.ba .was pre { border-color: var(--bad-soft); }
+.ba .now pre { border-color: var(--good-soft); }
+@media (max-width: 640px) { .ba { grid-template-columns: 1fr; } }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--surface-2); font-weight: 600; font-size: 12.5px; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+.tbl { overflow-x: auto; }
+.num { font-family: var(--mono); color: var(--muted); width: 28px; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.steps li { counter-increment: s; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 14px 10px 50px; position: relative; }
+.steps li::before { content: counter(s); position: absolute; left: 14px; top: 10px; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--accent); color: var(--surface); font-weight: 700; font-size: 13px;
+  display: grid; place-items: center; }
+.check { list-style: none; padding: 0; margin: 8px 0 0; columns: 2 320px; column-gap: 24px; }
+.check li { break-inside: avoid; padding: 3px 0 3px 24px; position: relative; font-size: 14px; }
+.check li::before { content: "☐"; position: absolute; left: 0; color: var(--accent); }
+.kd li { margin: 3px 0; }
+.q { display: grid; grid-template-columns: 28px 1fr; gap: 4px 10px; }
+.q .n { font-family: var(--mono); font-weight: 700; color: var(--accent); }
+.rec { margin-top: 6px; font-size: 13.5px; }
+.rec b { color: var(--good); }
+.hook { display: flex; gap: 10px; align-items: flex-start; }
+.hook .ic { font-size: 20px; line-height: 1; }
+footer { margin-top: 56px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Свой handoff и compact</h1>
+<p class="lead">Сводка черновика от 2026-10-24: разбор дыр, структура, процедура, инструкция для сжатия.
+Примеры — на материале DpiShell, значения условные.</p>
+
+<nav>
+  <a href="#files">Файлы</a><a href="#layers">Три слоя</a><a href="#holes">Дыры → решения</a>
+  <a href="#template">Шаблон</a><a href="#journal">Журнал</a><a href="#proc">Процедура</a>
+  <a href="#compact">Compact</a><a href="#owner">Решить</a>
+</nav>
+
+<h2 id="files">Что лежит в библиотеке</h2>
+<div class="grid g3 files">
+  <div class="card"><h3>skills/handoff/SKILL.md</h3><p>Скилл: шаблон, правила заполнения, проверка перед сдачей, продолжение.</p><span class="tag acc">178 строк</span></div>
+  <div class="card"><h3>skills/handoff/compact-instructions.md</h3><p>Раздел для CLAUDE.md, короткий <code>/compact</code>, хуки.</p><span class="tag acc">122 строки</span></div>
+  <div class="card"><h3>docs/handoff-design.md</h3><p>Разбор: 16 дыр со ссылками файл:строка, слои, проверка по докам.</p><span class="tag acc">127 строк</span></div>
+</div>
+
+<h2 id="layers">Три слоя вместо одной кучи</h2>
+<p class="muted">Делим по сроку жизни: у каждого слоя свой режим записи. Handoff пишет только в «Текущее» и «Историю».</p>
+<div class="grid g3" style="margin-top:12px">
+  <div class="card layer">
+    <span class="tag acc">Текущее</span>
+    <h3 style="margin-top:8px">HANDOFF.md задачи</h3>
+    <dl><dt>Живёт</dt><dd>до следующей передачи</dd><dt>Запись</dt><dd>перезапись разделов</dd>
+      <dt>Объём</dt><dd>≤ 80 строк</dd><dt>Читают</dt><dd>новая сессия целиком</dd></dl>
+  </div>
+  <div class="card layer l2">
+    <span class="tag good">История</span>
+    <h3 style="margin-top:8px">JOURNAL.md (в DpiShell — STATUS.md)</h3>
+    <dl><dt>Живёт</dt><dd>всегда</dd><dt>Запись</dt><dd>только дописывать</dd>
+      <dt>Объём</dt><dd>≤ 8 строк на сессию</dd><dt>Читают</dt><dd>grep по меткам, от anchor</dd></dl>
+  </div>
+  <div class="card layer l3">
+    <span class="tag warn">Правила</span>
+    <h3 style="margin-top:8px">CLAUDE.md проекта, rules/, память</h3>
+    <dl><dt>Живёт</dt><dd>месяцы</dd><dt>Запись</dt><dd>грабли, доступы, запреты</dd>
+      <dt>Объём</dt><dd>—</dd><dt>Читают</dt><dd>каждая сессия автоматически</dd></dl>
+  </div>
+</div>
+<p style="margin-top:10px" class="muted">Вопросы владельцу — четвёртое место: plan board / <code>docs/owner-questions.md</code>. HANDOFF даёт ссылку и номера открытых.</p>
+
+<h2 id="holes">Дыры и чем они закрыты</h2>
+<p class="muted">Найдены в живых DpiShell <code>HANDOFF.md</code> (H), <code>STATUS.md</code> (S), <code>router/HANDOFF.md</code> (R). Ниже — главные с примером «было → стало», полный список в таблице.</p>
+
+<div class="grid g2" style="margin-top:12px">
+  <div class="card">
+    <span class="tag bad">№1, №15</span> <h3 style="display:inline">Несколько «Сейчас» друг над другом</h3>
+    <div class="ba">
+      <div class="was"><span class="tag bad">было</span>
+<pre>## Сейчас (23.10)
+...
+## Сейчас (21.10)
+...
+## Сейчас (19.10)
+<i>две верхние — самые свежие</i></pre></div>
+      <div class="now"><span class="tag good">стало</span>
+<pre>## Состояние
+<i>одно, перезаписано</i>
+
+JOURNAL.md:
+2026-10-21 · ...
+2026-10-19 · ...</pre></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="tag bad">№11</span> <h3 style="display:inline">Пересказ вместо слов владельца</h3>
+    <div class="ba">
+      <div class="was"><span class="tag bad">было</span>
+<pre>Владелец разрешил довести
+до беты.</pre></div>
+      <div class="now"><span class="tag good">стало</span>
+<pre>## Слова владельца
+- 2026-10-22: «до беты доводи
+  сам, но push master — только
+  после моего да»</pre></div>
+    </div>
+    <p class="muted" style="font-size:13px;margin-top:8px">Условие «только после да» в пересказе потерялось.</p>
+  </div>
+
+  <div class="card">
+    <span class="tag bad">№9, №4</span> <h3 style="display:inline">Фоновое в неизвестном состоянии</h3>
+    <div class="ba">
+      <div class="was"><span class="tag bad">было</span>
+<pre>Агент окна, возможно,
+ещё работает.
+Сессия ai-db ждёт ответа.</pre></div>
+      <div class="now"><span class="tag good">стало</span>
+<pre>## Живое
+- агент окна, worktree
+  ../wt-window: проверить
+  git -C ../wt-window log -1;
+  если жив — ждать;
+  если нет — смёржить wt
+- сосед: тема «роутер»,
+  <dev>\dpishell-private\router;
+  имя — по ListAgents</pre></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="tag bad">№5, №7</span> <h3 style="display:inline">Грабли живут в handoff</h3>
+    <div class="ba">
+      <div class="was"><span class="tag bad">было</span>
+<pre>Осторожно: heredoc с \
+ломался 6 раз.
+...в конце журнала:
+push master = выпуск
+роутера!</pre></div>
+      <div class="now"><span class="tag good">стало</span>
+<pre>CLAUDE.md проекта:
+  правило про heredoc,
+  правило про push
+
+HANDOFF.md:
+## Опасно
+- push master = выпуск
+  роутера → CLAUDE.md §push</pre></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="tag bad">№2</span> <h3 style="display:inline">Устаревание не видно</h3>
+    <div class="ba">
+      <div class="was"><span class="tag bad">было</span>
+<pre># Handoff (17.10)
+<i>содержимое — от 23.10</i></pre></div>
+      <div class="now"><span class="tag good">стало</span>
+<pre>updated: 2026-10-24 18:40
+anchor: b8b5184
+
+$ git log b8b5184..HEAD
+<i>что изменилось без текста</i></pre></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <span class="tag bad">№12</span> <h3 style="display:inline">Решения без причин</h3>
+    <div class="ba">
+      <div class="was"><span class="tag bad">было</span>
+<pre>Решено: (1) отдельный
+worktree, (2) ..., (5) ...</pre></div>
+      <div class="now"><span class="tag good">стало</span>
+<pre>решение: роутер — отдельный
+  worktree
+почему: общий индекс git
+  ломал соседу коммиты
+отвергнуто: stash —
+  терялись файлы</pre></div>
+    </div>
+  </div>
+</div>
+
+<div class="tbl" style="margin-top:16px">
+<table>
+<tr><th>#</th><th>Дыра</th><th>Закрывает</th></tr>
+<tr><td class="num">1</td><td>Несколько «Сейчас» друг над другом</td><td>один HANDOFF, перезапись разделов; история — в журнал</td></tr>
+<tr><td class="num">2</td><td>Даты в заголовке не совпадают с содержимым</td><td><code>updated</code> + <code>anchor</code> в шапке</td></tr>
+<tr><td class="num">3</td><td>Мёртвые разделы остаются годами</td><td>лимит 80 строк, устаревшее → журнал</td></tr>
+<tr><td class="num">4</td><td>Имена соседних сессий меняются, в тексте их восемь</td><td>имя + папка + тема, сверка <code>ListAgents</code></td></tr>
+<tr><td class="num">5</td><td>Грабли повторяются (heredoc «6 раз»)</td><td>грабли — в правила; в handoff ссылка</td></tr>
+<tr><td class="num">6</td><td>Одно и то же в каждой записи журнала</td><td>состояние — один раз в HANDOFF, команды доступа — в CLAUDE.md</td></tr>
+<tr><td class="num">7</td><td>Критичное правило закопано в конце журнала</td><td>раздел «Опасно» + правило в CLAUDE.md проекта</td></tr>
+<tr><td class="num">8</td><td>«Не проверено» есть не всегда</td><td>обязательный раздел, пусто = «нет»</td></tr>
+<tr><td class="num">9</td><td>Фоновая работа в неизвестном состоянии</td><td>«Живое» с командой проверки и «если жив / если нет»</td></tr>
+<tr><td class="num">10</td><td>Таймеры keepwarm новая сессия не знает</td><td>шаг «снять таймеры», поле <code>timers</code></td></tr>
+<tr><td class="num">11</td><td>Разрешения пересказаны, условия теряются</td><td>«Слова владельца» — цитатой с датой</td></tr>
+<tr><td class="num">12</td><td>Решения без причин</td><td>журнал с метками <code>решение:</code>/<code>почему:</code>/<code>отвергнуто:</code></td></tr>
+<tr><td class="num">13</td><td>Вопросы владельцу в пяти местах</td><td>в HANDOFF только ссылка и номера открытых</td></tr>
+<tr><td class="num">14</td><td>Лимиты токенов устаревают за часы</td><td>не писать</td></tr>
+<tr><td class="num">15</td><td>Объём 122 строки, читается не всё</td><td>≤ 80 строк, «Состояние» ≤ 10</td></tr>
+<tr><td class="num">16</td><td>Секреты</td><td>только «задан / не задан» и путь</td></tr>
+</table>
+</div>
+
+<h2 id="template">Шаблон HANDOFF.md — заполненный пример</h2>
+<p class="muted"><span class="tag acc">*</span> обязательные. Пустой раздел — слово «нет»: пропущенный «Не проверено» читается как «всё проверено».</p>
+<div class="grid g2" style="margin-top:12px">
+<div class="card">
+<h3>Шапка — для монитора задач</h3>
+<pre>---
+task: dpishell
+project: DpiShell
+status: waiting-owner   # active|blocked|waiting-owner|done
+updated: 2026-10-24 18:40
+anchor: b8b5184
+branch: master
+next: выпуск роутера 0.2.3 после «да»
+resume: Продолжаем работу по <dev>\dpishell-private\docs\HANDOFF.md
+session: ai-e4
+timers: нет
+journal: STATUS.md
+---</pre>
+<p class="muted" style="font-size:13px;margin-top:8px">Имя файла фиксированное: команда продолжения не меняется, монитор находит «последний handoff» по стабильному пути.</p>
+</div>
+<div class="card">
+<h3>Тело</h3>
+<pre>## Start here *
+1. git status против «Состояния»
+2. git log b8b5184..HEAD
+3. ListAgents → соседу «роутер»: «я новая сессия»
+
+## Состояние *
+- 3 коммита с 22.10, впереди origin на 3
+- не закоммичено: src/Tray.cs
+- не запушено: ждёт «да» (см. Слова)
+
+## Слова владельца *
+- 2026-10-22: «push master — только после моего да»
+
+## Не проверено *
+- автозапуск после перезагрузки — не прогонялся
+
+## Живое *
+- таймеры: нет; агентов нет
+- сосед «роутер» (router/): ждёт пакет 0.2.3
+
+## Открытые вопросы *
+- plan board: №7, №9
+
+## Следующий шаг *
+- поднять PKG_RELEASE в router/Makefile,
+  дальше ждать «да» на push</pre>
+</div>
+</div>
+
+<h2 id="journal">Журнал — одна запись за сессию</h2>
+<div class="card" style="margin-top:12px">
+<pre>## 2026-10-24 · ai-e4
+сделано: b8b5184 трей без мерцания; 4a1c2e0 тесты UiGuard
+решение: иконку трея перерисовывать по таймеру, а не по событию
+почему: событие приходит пачкой при смене DPI — мерцание
+отвергнуто: подписка на WM_DPICHANGED — на части мониторов не приходит
+не проверено: два монитора с разным масштабом
+владелец: «мерцание — блокер беты»</pre>
+<p class="muted" style="font-size:13px;margin-top:8px">Метки ищутся grep: <code>grep -n "отвергнуто:" STATUS.md</code> — чтобы не пробовать то же снова.</p>
+</div>
+
+<h2 id="proc">Процедура передачи</h2>
+<ol class="steps">
+  <li><b>Таймеры и захваты.</b> <code>CronList</code> → снять keepwarm и пробуждения (<code>CronDelete</code>); что должно пережить — в <code>timers</code>.</li>
+  <li><b>Факты командами, не по памяти.</b> <code>git status --short</code>, <code>git log --oneline @{u}..</code>, <code>ListAgents</code>, <code>git worktree list</code>.</li>
+  <li><b>HANDOFF.md:</b> каждый раздел заменить. Старое, если ещё ценно, — в журнал.</li>
+  <li><b>Журнал:</b> одна запись с метками. Грабли второй раз — сразу в CLAUDE.md проекта.</li>
+  <li><b>Проверка</b> по чек-листу ниже. Любое «нет» — доделать.</li>
+  <li><b>Сообщение:</b> путь, причина, время остывания кэша, команда для новой сессии.</li>
+</ol>
+
+<div class="card" style="margin-top:14px">
+<h3>Проверка перед сдачей</h3>
+<ul class="check">
+  <li>Новая сессия выполнит «Start here» без вопросов?</li>
+  <li>Каждая ссылка — существующий путь?</li>
+  <li>«Состояние» совпадает с <code>git status</code>?</li>
+  <li>Агенты, процессы, таймеры — в «Живом» или сняты?</li>
+  <li>Соседи предупреждены, имена в «Живом»?</li>
+  <li>Слова владельца — цитаты с датой и условиями?</li>
+  <li>«Не проверено» честно, включая работу агентов?</li>
+  <li>Нет секретов, грабель, планов, содержимого файлов?</li>
+  <li>≤ 80 строк, <code>updated</code> — сейчас, <code>anchor</code> — HEAD?</li>
+  <li>В журнале <code>решение:</code>/<code>почему:</code> на каждое решение дня?</li>
+</ul>
+</div>
+
+<div class="grid g2" style="margin-top:14px">
+<div class="card">
+<h3>Сообщение после передачи</h3>
+<pre>⚠️ Handoff обновлён по окончании работы на сегодня:
+<dev>\dpishell-private\docs\HANDOFF.md
+Кэш сессии остынет около 19:40. Команда:
+
+Продолжаем работу по <dev>\dpishell-private\docs\HANDOFF.md</pre>
+</div>
+<div class="card">
+<h3>Продолжение</h3>
+<ul class="kd">
+  <li>HANDOFF целиком; журнал — только после <code>anchor</code>.</li>
+  <li><b>Свежесть:</b> файлы новее HANDOFF. Есть код или их ≥ 5 — спросить: перепроверить всё или только список.</li>
+  <li>«Start here»: <code>git status</code>, <code>git log &lt;anchor&gt;..HEAD</code>, <code>ListAgents</code>, проверка «Живого».</li>
+  <li>Расхождение — права реальность, записать в журнал.</li>
+  <li>HANDOFF — не разрешение на то, что ждало «да».</li>
+</ul>
+</div>
+</div>
+
+<h2 id="compact">Compact</h2>
+<p class="muted">Проверено по code.claude.com 2026-10-24. При автосжатии аргумента <code>/compact</code> нет, поэтому управлять им можно только разделом <code># Compact instructions</code> в CLAUDE.md.</p>
+
+<div class="grid g3" style="margin-top:12px">
+  <div class="card hook"><span class="ic">✗</span><div><h3>PreCompact</h3><p>Только блокирует сжатие, контекст не добавляет, модель не участвует. «Хук, который сначала обновит handoff», невозможен.</p><span class="tag bad">не ставим</span></div></div>
+  <div class="card hook"><span class="ic">✓</span><div><h3>PostCompact</h3><p>Получает <code>compact_summary</code> → сохранить в <code>.handoff/compact-&lt;время&gt;.md</code>. Бесплатная страховка, монитору видно.</p><span class="tag warn">скрипт не написан</span></div></div>
+  <div class="card hook"><span class="ic">✓</span><div><h3>SessionStart: compact</h3><p>Единственный способ добавить текст после сжатия: путь HANDOFF и «сверить git status, CronList, ListAgents».</p><span class="tag warn">скрипт не написан</span></div></div>
+</div>
+
+<div class="grid g2" style="margin-top:12px">
+  <div class="card"><span class="tag good">сохранять</span>
+    <ul class="kd">
+      <li>слова владельца — дословно, с условиями</li>
+      <li>решения + причины, отвергнутое + почему</li>
+      <li>ветка, коммит, незакоммиченное, точные пути</li>
+      <li>рабочие команды целиком; первая строка ошибки</li>
+      <li>фоновые процессы, агенты, таймеры, соседи по именам</li>
+      <li>непроверенное, открытые вопросы, следующий шаг</li>
+    </ul></div>
+  <div class="card"><span class="tag bad">выкидывать</span>
+    <ul class="kd">
+      <li>содержимое файлов → путь и строка «что там»</li>
+      <li>пройденные тупики → вывод одной строкой</li>
+      <li>логи и тесты → «N зелёных на &lt;коммит&gt;»</li>
+      <li>промежуточные версии текста и кода</li>
+      <li>рассуждения</li>
+      <li>секреты — никогда, только «задан / не задан»</li>
+    </ul></div>
+</div>
+
+<div class="card" style="margin-top:12px">
+<h3>Короткий вариант — разово, без CLAUDE.md</h3>
+<pre style="white-space:pre-wrap">/compact Сохрани дословно слова владельца, решения с причинами и отвергнутое, точные пути и команды, первые строки ошибок, фоновые процессы/агенты/таймеры/соседей по именам, непроверенное, открытые вопросы и следующий шаг с командой. Содержимое файлов замени путями, тупики — выводами, логи — итогами.</pre>
+</div>
+
+<div class="card" style="margin-top:12px">
+<span class="tag warn">не проверено</span>
+<p style="margin-top:6px">Работает ли раздел из <code>~/.claude/CLAUDE.md</code>: документация говорит только про CLAUDE.md корня проекта. Проверка: тестовая сессия → <code>/compact</code> → вышла ли сводка нужными разделами. Ещё есть сжатие по простою (<code>idleCompaction</code>) перед остыванием кэша — это тоже автосжатие, касается keepwarm.</p>
+</div>
+
+<h2 id="owner">Что решить</h2>
+<div class="grid" style="margin-top:12px">
+  <div class="card q"><span class="n">1</span><div><b>Фиксированный <code>HANDOFF.md</code> вместо <code>handoff-&lt;время&gt;.md</code>?</b>
+    <p class="rec"><b>Предлагается: да.</b> Тогда правятся <code>restart</code>, <code>rules/handoff-message.md</code> и README.</p></div></div>
+  <div class="card q"><span class="n">2</span><div><b>Имя журнала</b>
+    <p class="rec"><b>Предлагается:</b> <code>JOURNAL.md</code> по умолчанию, в DpiShell оставить <code>STATUS.md</code> через поле <code>journal:</code>.</p></div></div>
+  <div class="card q"><span class="n">3</span><div><b>Язык на работе: правило требует английский</b>
+    <p class="rec"><b>Предлагается:</b> русский везде; на работе — по тому, кто ещё читает.</p></div></div>
+  <div class="card q"><span class="n">4</span><div><b>Поля шапки — с сессией монитора задач</b>
+    <p class="rec"><b>Предлагается:</b> согласовать сейчас, пока он не начал их разбирать.</p></div></div>
+  <div class="card q"><span class="n">5</span><div><b>Скрипты PostCompact / SessionStart и проверка глобального раздела</b>
+    <p class="rec"><b>Предлагается:</b> сначала проверка (одна тестовая сессия), потом скрипты.</p></div></div>
+</div>
+
+<footer>Источник: <code><repo></code>, коммит 63b3d4b. Примеры в шаблоне и журнале иллюстративные.</footer>
+</div>
+</body>
+</html>
