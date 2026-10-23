@@ -85,34 +85,37 @@
 - **`SessionStart` с матчером `compact`** — единственный способ *добавить* текст после сжатия
   (`hooks-guide#re-inject-context-after-compaction`): напомнить путь HANDOFF и обязательную сверку.
 
-`~/.claude/settings.json` (не проверялось запуском; `node` — потому что PowerShell на каждый
-хук стоит около секунды, см. скилл session-board):
+Оба — один скрипт `tools/handoff/handoff-hook.js` с режимом `save` или `remind`. `node` — потому что
+PowerShell на каждый хук стоит около секунды (см. скилл session-board). `~/.claude/settings.json`:
 
 ```json
 {
   "hooks": {
     "PostCompact": [
       { "matcher": "manual|auto",
-        "hooks": [ { "type": "command", "command": "node \"<путь>/tools/handoff/save-compact.js\"" } ] }
+        "hooks": [ { "type": "command", "command": "node \"<путь>/tools/handoff/handoff-hook.js\" save" } ] }
     ],
     "SessionStart": [
       { "matcher": "compact",
-        "hooks": [ { "type": "command", "command": "node \"<путь>/tools/handoff/after-compact.js\"" } ] }
+        "hooks": [ { "type": "command", "command": "node \"<путь>/tools/handoff/handoff-hook.js\" remind" } ] }
     ]
   }
 }
 ```
 
-`save-compact.js`: читает JSON со stdin, пишет `compact_summary` в
-`<каталог задачи или cwd>/.handoff/compact-<ГГГГММДД-ЧЧММСС>.md` (каталог задачи — из строки
-`handoff:` в CLAUDE.md проекта, иначе `cwd`); ошибки гасит, код возврата 0.
+HANDOFF задачи скрипт ищет так: последний существующий путь `…HANDOFF.md` в журнале сессии — только
+во вводе пользователя («Продолжаем работу по …») и в Write/Edit модели, выводы инструментов не в
+счёт → строка `handoff:` в CLAUDE.md корня репозитория → `docs/HANDOFF.md` корня.
 
-`after-compact.js`: печатает в stdout одну строку — она попадёт в контекст:
-`Контекст сжат. Перед следующим действием: HANDOFF задачи — <путь, если найден> (обновлён <время>);
-сверить git status, CronList, ListAgents; слова владельца — только из сводки и HANDOFF, не
-додумывать.` Ничего не блокирует, код возврата 0.
+- `save`: `compact_summary` → `<каталог HANDOFF>/.handoff/compact-<ГГГГММДД-ЧЧММСС>.md`, в первой
+  строке комментарий с sessionId, trigger и путём HANDOFF. HANDOFF не найден —
+  `%LOCALAPPDATA%\handoff\compact\`. В репозитории `.handoff/` — в `.gitignore`.
+- `remind`: одна строка в контекст — «Контекст сжат. HANDOFF задачи — <путь> (изменён <время>).
+  Перед следующим действием сверить git status, CronList, ListAgents; слова владельца — только из
+  сводки и HANDOFF, не додумывать.»
 
-Оба скрипта — в `tools/handoff/` библиотеки, когда владелец подтвердит подход; пока их нет.
+Ошибки гасит, код возврата всегда 0. Проверено на временных каталогах (все три способа поиска,
+мусор на входе) и на журнале живой сессии; в живом сжатии ещё не срабатывал.
 
 ## Что остаётся делать модели вручную
 

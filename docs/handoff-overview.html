@@ -388,8 +388,8 @@ journal: STATUS.md
 
 <div class="grid g3" style="margin-top:12px">
   <div class="card hook"><span class="ic">✗</span><div><h3>PreCompact</h3><p>Только блокирует сжатие, контекст не добавляет, модель не участвует. «Хук, который сначала обновит handoff», невозможен.</p><span class="tag bad">не ставим</span></div></div>
-  <div class="card hook"><span class="ic">✓</span><div><h3>PostCompact</h3><p>Получает <code>compact_summary</code> → сохранить в <code>.handoff/compact-&lt;время&gt;.md</code>. Бесплатная страховка, монитору видно.</p><span class="tag warn">скрипт не написан</span></div></div>
-  <div class="card hook"><span class="ic">✓</span><div><h3>SessionStart: compact</h3><p>Единственный способ добавить текст после сжатия: путь HANDOFF и «сверить git status, CronList, ListAgents».</p><span class="tag warn">скрипт не написан</span></div></div>
+  <div class="card hook"><span class="ic">✓</span><div><h3>PostCompact</h3><p>Получает <code>compact_summary</code> → сохранить в <code>.handoff/compact-&lt;время&gt;.md</code>. Бесплатная страховка, монитору видно.</p><span class="tag good">handoff-hook.js</span></div></div>
+  <div class="card hook"><span class="ic">✓</span><div><h3>SessionStart: compact</h3><p>Единственный способ добавить текст после сжатия: путь HANDOFF и «сверить git status, CronList, ListAgents».</p><span class="tag good">handoff-hook.js</span></div></div>
 </div>
 
 <div class="grid g2" style="margin-top:12px">
@@ -433,8 +433,8 @@ journal: STATUS.md
     <p class="rec"><b>Предлагается:</b> русский везде; на работе — по тому, кто ещё читает.</p></div></div>
   <div class="card q"><span class="n">4</span><div><b>Поля шапки — с сессией монитора задач</b>
     <p class="rec"><b>Предлагается:</b> согласовать сейчас, пока он не начал их разбирать.</p></div></div>
-  <div class="card q"><span class="n">5</span><div><b>Скрипты PostCompact / SessionStart и проверка глобального раздела</b>
-    <p class="rec"><b>Предлагается:</b> сначала проверка (одна тестовая сессия), потом скрипты.</p></div></div>
+  <div class="card q"><span class="n">5</span><div><b>Проверка глобального раздела compact</b>
+    <p class="rec"><b>Предлагается:</b> одна тестовая сессия с <code>/compact</code>. Скрипты хуков готовы: <code>tools/handoff/handoff-hook.js</code>.</p></div></div>
 </div>
 
 <footer>Источник: <code><repo></code>, коммит 63b3d4b. Примеры в шаблоне и журнале иллюстративные.</footer>
