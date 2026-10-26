@@ -1,0 +1,19 @@
+{
+  "id": "usage-guard",
+  "title": "Отсечка по лимиту",
+  "plan": [
+    {
+      "text": "Хук PreToolUse",
+      "status": "todo"
+    },
+    {
+      "text": "Адаптивный опрос",
+      "status": "todo"
+    }
+  ],
+  "links": {
+    "blocked_by": [
+      "1001"
+    ]
+  }
+}

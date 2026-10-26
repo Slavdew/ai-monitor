@@ -22,6 +22,8 @@ const TAIL = 4 << 20;       // хвост журнала, байт; ход дл�
 const PREFIX = 'keepwarm:';
 const STATE_DIR = path.join(process.env.LOCALAPPDATA || '', 'keepwarm');
 const DAY_START = path.join(STATE_DIR, 'day-start');   // сегодняшний день: начало, конец от пользователя
+// <sid>.off — keepwarm сессии выключен снаружи (панель task-monitor), ALL.off — у всех: пинги гасятся молча
+const OFF_DIR = process.env.KEEPWARM_OFF_DIR || path.join(STATE_DIR, 'off');
 const CONFIG = process.env.KEEPWARM_CONFIG || path.join(__dirname, 'keepwarm.config.json');
 // имя файла handoff задаёт хук: скиллу не нужен отдельный вызов за временем
 const TASK_DIR = 'каталог "<AI_ROOT>\\tasks\\<номер> <тема>"';
@@ -219,6 +221,11 @@ function gate(data) {
     return;
   }
   if (!data.transcript_path) return;
+  const sid = String(data.session_id || '').replace(/[^\w-]/g, '');
+  if (fs.existsSync(path.join(OFF_DIR, 'ALL.off')) || (sid && fs.existsSync(path.join(OFF_DIR, `${sid}.off`)))) {
+    process.stdout.write(JSON.stringify({ decision: 'block', reason: 'keepwarm: выключен с панели' }));
+    return;
+  }
   const debug = prompt.includes('#debug');
   const wakeMin = debug ? 1 : WAKE_MIN;
   const plan = planOf(prompt, started);

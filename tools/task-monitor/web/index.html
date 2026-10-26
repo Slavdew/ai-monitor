@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Панель задач</title>
+<style>
+:root { --bg:#f7f7f5; --card:#fff; --fg:#1d1d1b; --mute:#4f4f4a; --line:#a6a69e; --acc:#2f6fdb;
+  --ok:#2e8b57; --tree:#9a9a92; --warn:#a86400; --bad:#c0392b; --wpage:1400px; --side:38%; --vw:780px }
+/* тема: auto — по системе; data-theme на <html> — выбор в ⚙ */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#171716; --card:#21211f; --fg:#e8e8e3; --mute:#9a9a93;
+  --line:#56564f; --tree:#6a6a63; --acc:#6c9cf0; --ok:#5fbf8a; --warn:#e0a040; --bad:#e57368; } }
+:root[data-theme="dark"] { --bg:#171716; --card:#21211f; --fg:#e8e8e3; --mute:#9a9a93;
+  --line:#56564f; --tree:#6a6a63; --acc:#6c9cf0; --ok:#5fbf8a; --warn:#e0a040; --bad:#e57368; }
+:focus-visible { outline:2px solid var(--acc); outline-offset:2px }
+/* системные элементы — в тон теме: схема для полей, свои флажки и полосы прокрутки */
+:root { color-scheme:light dark } :root[data-theme="light"] { color-scheme:light } :root[data-theme="dark"] { color-scheme:dark }
+* { scrollbar-width:thin; scrollbar-color:var(--line) transparent }
+*:hover { scrollbar-color:var(--mute) transparent }
+input[type=checkbox] { appearance:none; width:15px; height:15px; margin:0; flex:none; border:1px solid var(--mute); border-radius:4px;
+  background:var(--bg); display:inline-grid; place-content:center; cursor:pointer; vertical-align:-2px; transition:background .12s, border-color .12s }
+input[type=checkbox]:hover { border-color:var(--acc) }
+input[type=checkbox]:checked { background:var(--acc); border-color:var(--acc) }
+input[type=checkbox]:checked::after { content:""; width:8px; height:4px; border:2px solid var(--bg); border-top:0; border-right:0; transform:translateY(-1px) rotate(-45deg) }
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, "Segoe UI", sans-serif }
+header { position:sticky; top:0; z-index:2; background:var(--bg); border-bottom:1px solid var(--line) }
+/* шапка — той же ширины, что содержимое: на UHD вкладки и лимиты не разъезжаются по краям */
+.hwrap { max-width:var(--wpage); margin:0 auto; padding:8px 16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap }
+body.full .hwrap { max-width:none }
+nav { display:flex; gap:4px; flex-wrap:wrap }
+nav button { border:1px solid transparent; background:none; color:var(--mute); padding:4px 10px; border-radius:6px; cursor:pointer; font:inherit }
+nav button.on { color:var(--fg); border-color:var(--line); background:var(--card) }
+#limits { margin-left:auto; display:flex; gap:10px; font-size:12px; color:var(--mute) }
+.lim b { font-variant-numeric:tabular-nums } .lim.critical b { color:var(--bad) } .lim.warning b { color:var(--warn) }
+#live { width:8px; height:8px; border-radius:50%; background:var(--mute) } #live.on { background:var(--ok) }
+/* одна ширина для всех видов: по центру до --wpage или во всю (⚙) */
+main { padding:12px 16px; max-width:var(--wpage); margin:0 auto } body.full main { max-width:none }
+/* список | граница (тянется, помнится) | предпросмотр; на узком предпросмотра нет — щелчок открывает карточку */
+main.split { display:grid; grid-template-columns:minmax(0, 1fr) 14px minmax(260px, var(--side)); align-items:start }
+#split { display:none } main.split #split { display:flex; justify-content:center; align-self:stretch; cursor:col-resize; touch-action:none; border-radius:4px }
+#split::before { content:""; width:2px; background:var(--line); border-radius:2px } #split:hover::before, #split.drag::before { width:3px; background:var(--acc) }
+#side:empty { display:none }
+main.split #side { position:sticky; top:calc(var(--hh, 49px) + 8px); max-height:calc(100vh - var(--hh, 49px) - 16px); overflow:auto }
+body.narrow main.split { grid-template-columns:1fr } body.narrow main.split #split, body.narrow main.split #side { display:none }
+body.narrow .head { flex-wrap:wrap; row-gap:4px } body.narrow .head .title { flex-basis:100%; order:-1; white-space:normal }
+body.narrow .head .grow { display:none }
+/* связь с сервером пропала: данные на экране не обновляются */
+#offline { background:var(--warn); color:var(--bg); font-size:13px; padding:3px 16px; position:sticky; top:0; z-index:3 }
+.preview { background:var(--card); border:1px solid var(--acc); border-radius:8px; padding:12px }
+.preview.empty { border-color:var(--line); color:var(--mute); padding:12px }
+.dhead { display:flex; gap:10px; align-items:baseline; margin-bottom:8px } .dhead .title { font-size:15px }
+.row.sel { border-color:var(--acc); box-shadow:0 0 0 1px var(--acc) inset }
+.row.card { padding:16px } .row.card h4 { margin:14px 0 4px; color:var(--mute); font-weight:500 }
+.slist { list-style:none; padding:0; margin:0 } .slist li { padding:2px 0 }
+.ibtn.go { flex:none; align-self:center }
+nav > div { display:inline-flex; align-items:center } nav .cardtab { border-style:dashed }
+nav .x { border:0; background:none; font:inherit; cursor:pointer; color:var(--mute); padding:2px 6px 2px 2px; border-radius:4px } nav .x:hover { color:var(--bad) }
+.row { background:var(--card); border:1px solid var(--line); border-radius:8px; margin:6px 0; padding:8px 12px }
+/* дерево: вертикаль от родителя по отступу, отвод с кружком к каждой подзадаче, у последней — обрыв */
+.row { position:relative }
+.row.d1 { margin-left:28px } .row.d2 { margin-left:56px } .row.d3 { margin-left:84px }
+.row.child::before { content:""; position:absolute; left:-17px; top:-7px; bottom:-7px; border-left:2px solid var(--tree) }
+.row.child.last::before { bottom:auto; height:28px }
+.row.child::after { content:""; position:absolute; left:-17px; top:19px; width:12px; border-top:2px solid var(--tree) }
+.row.child > .head::before { content:""; position:absolute; left:-7px; top:16px; width:8px; height:8px; border-radius:50%; background:var(--mute) }
+/* полоса подзадач под задачей: продолжение её карточки */
+.strip { position:relative; margin:-7px 0 6px; padding:3px 12px; border:1px solid var(--line); border-top:none;
+  border-radius:0 0 8px 8px; background:var(--bg); font-size:12px; color:var(--mute) }
+.strip-head { cursor:pointer; user-select:none } .strip-head:hover { color:var(--fg) }
+.strip b { color:var(--fg); font-weight:600 }
+/* строка — всегда в одну линию: длинное название и путь обрезаются многоточием */
+.head { display:flex; gap:10px; align-items:center; cursor:pointer; min-width:0 }
+/* в строке сжимается только название; чипы и полоса — целиком */
+.head > * { flex:none } .head .tag, .head .sess { white-space:nowrap }
+.head .title, .head .grow { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.head .title { flex:0 1 auto } .head .grow { flex:1 1 0 }
+#list h3 { margin:4px 0 8px }
+.id { font-family:ui-monospace, Consolas, monospace; color:var(--mute); font-size:12px; user-select:all; white-space:nowrap }
+.title { font-weight:600 } .grow { flex:1 }
+.tag { font-size:11px; padding:1px 6px; border-radius:10px; border:1px solid var(--line); color:var(--mute); white-space:nowrap }
+.tag.ok { color:var(--ok); border-color:var(--ok) } .tag.par { color:var(--acc); border-color:var(--acc); border-style:dashed }
+#limits .stale { color:var(--mute) } .wdot { color:var(--warn); font-size:16px; line-height:0 }
+.tag.active { color:var(--ok); border-color:var(--ok) } .tag.blocked, .tag.stale { color:var(--warn); border-color:var(--warn) }
+.tag.claim { color:var(--acc); border-color:var(--acc) } .tag.done { opacity:.6 } .tag.link { border-style:dashed }
+.bar { width:56px; height:6px; background:var(--line); border-radius:3px; overflow:hidden; align-self:center }
+.bar i { display:block; height:100%; background:var(--acc) }
+.sess { font-size:12px; color:var(--mute) } .sess b { color:var(--ok) }
+.body { margin-top:8px; border-top:1px solid var(--line); padding-top:8px; display:none }
+.row.open > .body { display:block }
+.goal { white-space:pre-wrap; margin:0 0 8px }
+.plan { list-style:none; padding:0; margin:0 0 8px }
+.plan li { display:grid; grid-template-columns:3ch auto auto minmax(0, 1fr); column-gap:8px; padding:2px 0; align-items:baseline }
+.plan .st { justify-self:start; max-width:100%; overflow:hidden; text-overflow:ellipsis; text-align:center } .plan .st.edit { cursor:pointer; font-family:inherit; background:transparent; line-height:inherit } .plan .st.edit:hover { color:var(--fg); border-color:var(--fg) }
+.plan li.done span:last-child { text-decoration:line-through; color:var(--mute) }
+.plan .n { color:var(--mute); min-width:18px; text-align:right; font-variant-numeric:tabular-nums }
+.plan .dep { font-size:12px; white-space:nowrap } .plan .dep.par { color:var(--acc); font-weight:700 } .plan .dep.wait { color:var(--mute) }
+.plan li.waiting span:last-child { color:var(--mute) } .plan li.ready span:last-child, .plan li.doing span:last-child { font-weight:600 }
+.plan li.doing .st { color:var(--acc); border-color:var(--acc) }
+.kv { display:grid; grid-template-columns:max-content 1fr; gap:2px 12px; font-size:13px }
+.kv dt { color:var(--mute) } .kv dd { margin:0; overflow-wrap:anywhere }
+code.copy { cursor:copy; background:var(--bg); padding:1px 4px; border-radius:4px }
+table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:8px }
+th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); font-size:13px }
+th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
+.err { color:var(--bad); font-size:12px; overflow-wrap:anywhere } .empty { overflow-wrap:anywhere } #limits { align-items:center }
+.ibtn { width:20px; height:20px; border:1px solid var(--line); border-radius:50%; background:none; color:var(--mute); font:inherit; font-size:11px; line-height:18px; padding:0; cursor:pointer }
+.ibtn:hover { color:var(--fg) } .ibtn.bad { color:var(--bad); border-color:var(--bad) }
+.toast { white-space:pre-line; max-width:min(520px, calc(100vw - 32px)) } .empty { color:var(--mute); padding:20px 0 }
+.toast { position:fixed; bottom:16px; right:16px; background:var(--fg); color:var(--bg); padding:6px 12px; border-radius:6px; opacity:0; transition:opacity .2s }
+.toast.on { opacity:1 }
+/* вопрос: совет агента, варианты ответа */
+.advice { border-left:3px solid var(--acc); background:var(--bg); border-radius:0 6px 6px 0; padding:4px 10px; font-size:13px }
+.advice .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--acc); font-weight:600; margin-right:6px }
+.qopts { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px }
+.qopt { font:inherit; font-size:12.5px; color:var(--fg); background:var(--card); border:1px solid var(--line); border-radius:999px; padding:2px 11px; cursor:pointer }
+.qopt:hover { border-color:var(--acc) } .qopt.adv { border-color:var(--acc); color:var(--acc) } .qopt.rw { color:var(--mute) }
+.qopt.on { background:var(--acc); border-color:var(--acc); color:var(--bg) } .qopt.rw.on { background:var(--warn); border-color:var(--warn); color:var(--bg) }
+.sess.ok { color:var(--ok) } .was s { opacity:.85 } .qage { white-space:nowrap }
+/* задача: шапка → сводка → вкладки; раскладка — по ширине самой задачи (карточка, предпросмотр) */
+/* контейнер — обёртка (карточка, предпросмотр): правила по его ширине перестраивают .task внутри */
+.row.card, .preview { container:task / inline-size }
+.t-head { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px }
+.t-head .title { font-size:15px; font-weight:600; flex:1 1 200px; min-width:0 }
+.t-chips, .t-act { display:flex; gap:6px; align-items:center; flex-wrap:wrap } .t-act { margin-left:auto }
+.task.card .t-head { position:sticky; top:var(--hh, 49px); z-index:1; background:var(--card); margin:-16px -16px 8px; padding:12px 16px 8px; border-bottom:1px solid var(--line); border-radius:8px 8px 0 0 }
+.t-sum { display:flex; gap:6px; align-items:flex-start; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:10px }
+.t-sumbody { min-width:0; flex:1 } .t-sum .goal, .mdx { white-space:normal } .t-sum .goal { margin:0 0 6px } .t-sum .desc { margin:0 0 6px; color:var(--mute) }
+.t-next { font-size:15px; margin:4px 0 } .t-cur { margin:2px 0 } .t-sum .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--mute); font-weight:600; margin-right:6px }
+.t-facts, .t-line { font-size:12.5px; color:var(--mute); margin-top:4px } .t-line { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:0; flex:1; min-width:0 }
+.t-facts .live { color:var(--ok) }
+.t-fold { border:0; background:none; color:var(--mute); cursor:pointer; padding:2px; font:inherit; line-height:1 } .t-fold:hover { color:var(--fg) }
+.t-tabs { display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:8px; overflow-x:auto; scrollbar-width:none }
+.t-tab { font:inherit; font-size:13px; color:var(--mute); background:none; border:0; border-bottom:2px solid transparent; padding:6px 12px; cursor:pointer; white-space:nowrap }
+.t-tab:hover { color:var(--fg) } .t-tab.on { color:var(--fg); border-bottom-color:var(--acc) } .t-tab b { font-weight:600; color:var(--mute) } .t-tab b.wait { color:var(--warn) }
+/* Markdown в тексте задачи (.md — у просмотра документов, своё) */
+.mdx p { margin:0 0 6px } .mdx p:last-child { margin-bottom:0 } .mdx ul, .mdx ol { margin:4px 0 6px; padding-left:20px } .mdx h5 { margin:6px 0 4px; font-size:13px }
+.task code, .plan code { font-family:ui-monospace, Consolas, monospace; font-size:.9em; background:var(--bg); padding:0 4px; border-radius:4px }
+.tag.prio { font-weight:700 } .tag.prio.bad { color:var(--bad); border-color:var(--bad) } .tag.stage { color:var(--fg) }
+.remain { white-space:nowrap }
+.flist { list-style:none; padding:0; margin:0 } .flist li { display:flex; gap:10px; align-items:baseline; padding:3px 0; min-width:0 }
+.flist a { color:var(--acc); text-decoration:none; white-space:nowrap } .flist .k { font-family:ui-monospace, Consolas, monospace; font-size:11px; color:var(--mute); margin-right:4px }
+.flist .fpath { font-size:11.5px; color:var(--mute); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; min-width:0 }
+.plan li.psec { cursor:pointer } .plan li.psec .cnt { font-weight:400 }
+.menu hr { border:0; border-top:1px solid var(--line); margin:4px 0 } .menu .mh { font-size:11px; color:var(--mute); padding:2px 14px; text-transform:uppercase; letter-spacing:.04em }
+.menu .mk { float:right; margin-left:18px; color:var(--mute); font-size:11px }
+@container task (width < 520px) {
+  .plan li { grid-template-columns:3ch auto minmax(0, 1fr); grid-template-areas:"n st dep" "t t t" }
+  .plan li > .n { grid-area:n } .plan li > .st { grid-area:st } .plan li > .dep { grid-area:dep } .plan li > .t { grid-area:t }
+  .qa { padding-left:0 } .t-head .title { flex-basis:100% }
+}
+/* вариант B: паспорт | работа — когда задача шире 900 px; паспорт закреплён при прокрутке работы */
+@container task (width >= 900px) {
+  .t-body { display:grid; grid-template-columns:minmax(300px, 30%) minmax(0, 1fr); column-gap:20px; align-items:start }
+  .t-pass { position:sticky; top:calc(var(--hh, 49px) + 56px) }
+}
+@container task (width >= 1800px) { .t-body { grid-template-columns:420px minmax(0, 1fr) } }
+.t-work { min-width:0 }
+/* шкала этапов: ширина отрезка — по числу пунктов, заливка — сделанное */
+.sb-cap { font-size:12px; color:var(--mute); margin:0 0 4px } .sb-cap b { color:var(--fg); font-weight:600 }
+.stagebar { display:flex; gap:3px; list-style:none; padding:0; margin:0 0 8px }
+.stagebar li { cursor:pointer } .stagebar li:hover { border-color:var(--mute) } .stagebar li.on { outline:2px solid var(--acc); outline-offset:1px }
+.sfil { display:flex; gap:10px; align-items:center; font-size:13px; color:var(--mute) }
+.t-info { margin-top:10px } .t-info .kv { font-size:12.5px }
+.stagebar li { position:relative; flex:1 1 auto; min-width:0; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:3px 8px; font-size:12px;
+  display:flex; gap:6px; align-items:baseline; overflow:hidden; color:var(--mute) }
+.stagebar li i { position:absolute; left:0; top:0; bottom:0; background:var(--acc); opacity:.14 } .stagebar li.done i { background:var(--ok) }
+.stagebar .nm { position:relative; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0 } .stagebar b { position:relative; font-weight:600; white-space:nowrap }
+.stagebar li.cur { border-color:var(--acc); color:var(--fg) } .stagebar li.done { color:var(--ok) } .stagebar .sn { display:none }
+@container task (width < 520px) { .stagebar li:not(.cur) { display:none } .stagebar .sn { display:inline; position:relative; margin-left:auto } }
+/* канбан по задачам */
+.kanban { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; align-items:start }
+.kcol h3 { margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mute) } .kcol h3 .cnt { font-weight:400 }
+.kcol.wait h3 { color:var(--warn) } .kcol.blocked h3 { color:var(--bad) } .kcol.doing h3 { color:var(--acc) }
+.kcard { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; cursor:pointer; display:grid; gap:4px }
+.kcard:hover { border-color:var(--acc) } .kh { display:flex; gap:6px; align-items:center; flex-wrap:wrap } .kh .live { color:var(--ok); margin-left:auto }
+.kt { font-weight:600 } .ks { font-size:12.5px } .kn { font-size:12.5px; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
+.kf { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+/* шеврон сворачивания */
+.chev { width:1em; height:1em; flex:none; vertical-align:-.15em; margin-right:4px; fill:none; stroke:currentColor; stroke-width:1.8;
+  stroke-linecap:round; stroke-linejoin:round; transition:transform .15s }
+.chev.open { transform:rotate(90deg) }
+/* подвкладки — типы задач второй строкой */
+.subtabs { display:flex; flex-wrap:wrap; gap:4px; margin:2px 0 10px; padding-bottom:8px; border-bottom:1px solid var(--line) }
+.subtab { font:inherit; font-size:13px; color:var(--mute); background:none; border:1px solid transparent; border-radius:6px; padding:3px 10px; cursor:pointer }
+.subtab:hover { color:var(--fg) } .subtab.on { color:var(--fg); background:var(--card); border-color:var(--line) }
+.subtab b { font-weight:600; color:var(--mute); margin-left:2px } .subtabs.warn .subtab b { color:var(--warn) }
+.dhead.fold { cursor:pointer; align-items:center } .row.inbox.folded .dhead { margin:0 }
+[hidden] { display:none !important }
+/* решённое скрыто: строка «› сделано: N» раскрывает */
+.more { cursor:pointer; user-select:none; font-size:12px; color:var(--mute) } .more:hover { color:var(--fg) }
+.morep { margin:4px 0 6px }
+.plan li.psec { display:block; margin-top:8px; font-size:12px; font-weight:600; color:var(--mute); text-transform:uppercase; letter-spacing:.04em }
+.plan li.later span:last-child { color:var(--mute) }
+/* доска объявлений: форма записи от лица владельца */
+.bf { display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+.bf input, .bf select { font:inherit; font-size:13px; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:5px 8px }
+.bf #btext { flex:1 1 320px; min-width:0 } .bf #bkey { width:90px } .bf #bhours { width:60px }
+.bf label { display:inline-flex; gap:6px; align-items:center } .row.dead { opacity:.6 }
+/* вопросы владельцу */
+.tag.wait { color:var(--warn); border-color:var(--warn) } .tag.req { color:var(--acc); border-color:var(--acc) }
+.wbadge { display:inline-block; min-width:16px; padding:0 4px; border-radius:8px; background:var(--warn); color:var(--bg); font-size:11px; text-align:center }
+/* вопрос: поле ответа в строку, «↺ проще» справа от него */
+.qa { grid-column:1 / -1; min-width:0; padding:2px 0 6px calc(3ch + 8px); display:grid; grid-template-columns:minmax(0, 1fr); gap:4px }
+.qa textarea.unsaved { border-color:var(--bad) } .btn.sm { font-size:12px; padding:1px 8px }
+.qa textarea { min-width:0 } h4.asks { margin:10px 0 2px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mute); font-weight:600 }
+.plan li { min-width:0 } .plan li > span:last-of-type { min-width:0; overflow-wrap:anywhere }
+.qa .ans { white-space:pre-wrap; border-left:3px solid var(--acc); padding:2px 8px; background:var(--bg); border-radius:4px; font-size:13px }
+.qa textarea { width:100%; font:inherit; font-size:13px; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:4px 8px; resize:vertical; min-height:2.1em; overflow:hidden }
+.qa textarea:focus { border-color:var(--acc) } .unread { color:var(--acc) }
+.chips { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 }
+.chip { font:inherit; font-size:12px; color:var(--mute); background:transparent; border:1px solid var(--line); border-radius:999px; padding:2px 10px; cursor:pointer }
+.chip b { color:var(--fg); font-weight:600 } .chip.on { color:var(--acc); border-color:var(--acc) }
+.reph { display:flex; gap:10px; align-items:center; font-size:12.5px; color:var(--mute); min-height:26px }
+.reph label { white-space:nowrap; cursor:pointer }
+.reph input[type=text] { flex:1 1 auto; min-width:0; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:3px 8px }
+.reph input[type=text]:focus { outline:none; border-color:var(--acc) }
+.btn { white-space:nowrap; font:inherit; font-size:13px; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:6px; padding:4px 10px; cursor:pointer }
+.btn.primary { background:var(--acc); border-color:var(--acc); color:var(--bg); font-weight:600 } .btn:disabled { opacity:.6 }
+/* разделы вкладок внутри группы */
+.tabsec h2 { margin:14px 0 4px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--mute); cursor:pointer; user-select:none }
+.tabsec h2:hover { color:var(--fg) } .tabsec .cnt { font-weight:400; opacity:.8 }
+/* документы задачи и просмотр справа */
+.docs { display:flex; flex-wrap:wrap; gap:4px 6px }
+.docs a { font-size:12.5px; color:var(--acc); text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:0 7px; background:var(--bg) }
+.docs a:hover { border-color:var(--acc) } .docs .k { font-family:ui-monospace, Consolas, monospace; font-size:11px; color:var(--mute); margin-right:4px }
+#viewer { position:fixed; top:0; right:0; bottom:0; width:min(var(--vw), 100vw); background:var(--card); border-left:1px solid var(--line);
+  box-shadow:-8px 0 24px rgb(0 0 0 / .18); display:flex; flex-direction:column; z-index:5 }
+#viewer .vh { display:flex; gap:10px; align-items:center; padding:8px 14px; border-bottom:1px solid var(--line) }
+#viewer .vh b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap } #viewer .vh a { font-size:12px; color:var(--acc) }
+#vbody { flex:1; overflow:auto }
+/* левый край просмотра тянется — ширина помнится */
+#vgrip { position:absolute; left:-4px; top:0; bottom:0; width:8px; cursor:col-resize; touch-action:none } #vgrip:hover, #vgrip.drag { background:var(--acc); opacity:.4 }
+/* меню статуса пункта и настройки вида */
+.menu { position:fixed; z-index:6; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 18px rgb(0 0 0 / .25); padding:4px 0; min-width:140px }
+.menu button { display:block; width:100%; text-align:left; border:0; background:none; color:var(--fg); font:inherit; font-size:13px; padding:4px 14px; cursor:pointer }
+.menu button:hover, .menu button:focus-visible { background:var(--bg) } .menu button.cur { color:var(--acc) } .menu button.cur::before { content:"✓ " }
+.prefs { padding:8px 12px; display:grid; gap:8px; font-size:13px; min-width:240px } .prefs .lbl { color:var(--mute); font-size:12px }
+.seg { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden }
+.seg button { white-space:nowrap; width:auto; border:0; background:var(--card); color:var(--mute); padding:3px 10px; font:inherit; font-size:13px; cursor:pointer } .seg button.on { background:var(--acc); color:var(--bg) }
+/* карточка: закреплённая шапка, сведения сбоку */
+.chead { position:sticky; top:var(--hh, 49px); z-index:1; background:var(--card); margin:-16px -16px 10px; padding:12px 16px 8px; border-bottom:1px solid var(--line); border-radius:8px 8px 0 0 }
+.chead .dhead { margin:0 } .chead .meta { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px }
+.cgrid { display:grid; grid-template-columns:minmax(0, 1fr) minmax(240px, .45fr); grid-template-areas:"a s" "p s"; gap:4px 20px; align-items:start }
+.cgrid .ca { grid-area:a; min-width:0 } .cgrid .cp { grid-area:p; min-width:0 } .cgrid .cs { grid-area:s; min-width:0 }
+body.wide .cgrid { grid-template-columns:minmax(0, 1fr) minmax(0, 1fr) minmax(260px, .6fr); grid-template-areas:"a p s" }
+body.narrow .cgrid { grid-template-columns:1fr; grid-template-areas:"a" "p" "s" }
+.inbox .dhead { margin-bottom:4px } #vbody iframe { width:100%; height:100%; border:0; background:#fff }
+.md { padding:4px 24px 40px; max-width:860px; margin:0 auto; overflow-wrap:anywhere }
+.md pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px; overflow:auto; font-size:13px }
+.md code { font-family:ui-monospace, Consolas, monospace; font-size:.92em }
+.md table { width:auto; border-collapse:collapse; display:block; overflow:auto } .md th, .md td { border:1px solid var(--line); padding:4px 8px }
+.md blockquote { margin:0; padding:2px 12px; border-left:3px solid var(--line); color:var(--mute) }
+.md img { max-width:100% } .md a { color:var(--acc) }
+body.docpage header { display:none } body.docpage main { max-width:900px }
+</style>
+<script src="marked.min.js" defer></script>
+<script src="purify.min.js" defer></script>
+</head>
+<body>
+<div id="offline" hidden></div>
+<header><div class="hwrap">
+  <span id="live" title="связь с сервером"></span>
+  <nav id="nav"></nav>
+  <div id="limits"></div>
+  <button class="ibtn" id="prefs" type="button" title="вид: масштаб, ширина, тема" aria-haspopup="true">⚙</button>
+</div></header>
+<main id="main"><div id="list"><p class="empty">Загрузка…</p></div><div id="split" role="separator" aria-orientation="vertical" aria-label="Граница списка и предпросмотра: тянуть, стрелки, двойной щелчок — сброс" tabindex="0"></div><aside id="side"></aside></main>
+<div class="toast" id="toast"></div>
+<aside id="viewer" hidden aria-label="Просмотр документа"><div id="vgrip" title="тянуть — ширина просмотра"></div>
+  <div class="vh"><b id="vtitle"></b><a id="vtab" target="_blank" rel="noopener">в новой вкладке</a><button class="ibtn" id="vclose" type="button" title="закрыть (Esc)">×</button></div>
+  <div id="vbody"></div>
+</aside>
+<script src="app.js"></script>
+</body>
+</html>

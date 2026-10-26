@@ -46,10 +46,13 @@ function devEnvPath() {
   return main ? path.join(main, '.dev.env') : own;
 }
 
-// ONEC_IB_SERVER → серверный INFOBASE_PATH, как Get-IbServer.
+// ONEC_IB_SERVER → серверный INFOBASE_PATH, как Get-IbServer; без .dev.env — доска машины
+// из SESSION_BOARD (не 1С-проект, дома), не задана — молчим, как раньше.
 function ibServer() {
   const env = {};
-  for (const line of fs.readFileSync(devEnvPath(), 'utf8').split(/\r?\n/)) {
+  const file = devEnvPath();
+  if (!fs.existsSync(file)) return process.env.SESSION_BOARD || null;
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
     const m = /^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
     if (m && !/^\s*#/.test(line)) env[m[1]] = m[2];
   }

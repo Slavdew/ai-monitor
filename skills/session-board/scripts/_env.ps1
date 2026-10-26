@@ -33,7 +33,10 @@ function Resolve-RepoRoot {
 }
 
 function Get-IbServer {
-  $envFile = Join-Path (Resolve-RepoRoot) ".dev.env"
+  # Без .dev.env (не 1С-проект, дома) — доска машины из $env:SESSION_BOARD, если задана;
+  # не задана — как раньше, ошибка про .dev.env.
+  try { $root = Resolve-RepoRoot } catch { if ($env:SESSION_BOARD) { return $env:SESSION_BOARD }; throw }
+  $envFile = Join-Path $root ".dev.env"
   $settings = @{}
   foreach ($line in Get-Content $envFile -Encoding UTF8) {
     if ($line -match '^\s*#') { continue }

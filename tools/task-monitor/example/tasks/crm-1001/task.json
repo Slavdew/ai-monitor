@@ -1,0 +1,12 @@
+{
+  "id": "1001",
+  "title": "Подзадача из CRM (пример ссылки)",
+  "project": "Инструменты",
+  "plan": [],
+  "links": {
+    "parent": "task-monitor",
+    "related": [
+      "usage-guard"
+    ]
+  }
+}
