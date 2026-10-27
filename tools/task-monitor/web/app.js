@@ -1458,17 +1458,39 @@ if (DOC) {
   addEventListener('DOMContentLoaded', () => renderMd(DOC, $('#list'))   // marked и DOMPurify — defer, готовы к этому событию
     .catch((err) => { $('#list').innerHTML = `<p class="err">Не открылось: ${esc(err.message)}</p>`; }));
 } else if (!location.search.includes('nosse')) {   // ?nosse — для снимков headless-браузером
-  const es = new EventSource('/events');
-  let lost = null;   // связь пропала дольше 5 с — полоса со временем данных: на экране не свежее
-  es.onopen = () => { $('#live').classList.add('on'); clearTimeout(lost); lost = null; $('#offline').hidden = true; };
-  es.onerror = () => {
-    $('#live').classList.remove('on');
+  // Одно соединение SSE на весь браузер: к одному адресу браузер держит не больше 6 соединений, и при 5–6 вкладках
+  // панели запросы («Зафиксировать» и др.) вставали в очередь — «подвисание» (воспроизведено 28.10: 8 вкладок — ответа
+  // нет). SSE держит вкладка с блокировкой tm-sse (Web Locks), остальным сигналы — через BroadcastChannel; вкладка
+  // закрылась — блокировку берёт следующая. Нет этих API — по-старому, своё соединение у каждой вкладки.
+  let lost = null, live = false;   // связь пропала дольше 5 с — полоса со временем данных: на экране не свежее
+  const setLive = (on) => {
+    live = on;
+    $('#live').classList.toggle('on', on);
+    if (on) { clearTimeout(lost); lost = null; $('#offline').hidden = true; return; }
     if (lost) return;
     lost = setTimeout(() => {
       const at = state.at ? new Date(state.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '—';
       $('#offline').textContent = `Нет связи с сервером панели · данные на ${at} · поднять: start.cmd`; $('#offline').hidden = false;
     }, 5000);
   };
-  es.onmessage = (m) => { if (+m.data !== state.rev) pull(); };
+  const onRev = (rev) => { if (+rev !== state.rev) pull(); };
+  const bc = 'BroadcastChannel' in window ? new BroadcastChannel('tm-sse') : null;
+  let leader = false;
+  if (bc) {
+    bc.onmessage = (m) => {
+      const d = m.data || {};
+      if (d.type === 'rev') onRev(d.rev);
+      else if (d.type === 'live') setLive(d.on);
+      else if (d.type === 'ask' && leader) bc.postMessage({ type: 'live', on: live });   // новая вкладка спрашивает связь
+    };
+  }
+  const hold = () => new Promise(() => {   // не завершается: блокировка — пока вкладка жива
+    leader = true;
+    const es = new EventSource('/events');
+    es.onopen = () => { setLive(true); bc?.postMessage({ type: 'live', on: true }); };
+    es.onerror = () => { setLive(false); bc?.postMessage({ type: 'live', on: false }); };
+    es.onmessage = (m) => { onRev(m.data); bc?.postMessage({ type: 'rev', rev: m.data }); };
+  });
+  if (bc && navigator.locks) { navigator.locks.request('tm-sse', hold); bc.postMessage({ type: 'ask' }); } else hold();
 }
 if (!DOC) { applyPrefs(); setInterval(tickAgo, 15000); pull(); addEventListener('DOMContentLoaded', () => { if (state.rev) { for (const n of $('#list').children) n._html = null; render(); } }); }
