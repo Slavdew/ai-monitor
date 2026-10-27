@@ -8,7 +8,7 @@
   set T N status=done note="…" after=3,4 text="…" section=…      поля пункта
   set T priority=1 stage="…" health=ok next="…" related+=B docs+="Назв::путь"   поля задачи
   batch T < строки                      пачка правок плана одной записью
-  act T "что" --run "команда"         ожидаемое действие владельца (блок «Ожидаемые действия»)
+  act T "что" --run "команда" [--where cmd] | --how "шаги"   ожидаемое действие владельца («Ожидаемые действия»)
   ack T N… [done]                       ответ учтён (done — заодно закрыть вопрос); синоним — принят T N… [done]
   unseen [--mine]                       неподтверждённые ответы с готовыми командами
   next [--tab T] [--project P] | take T | release [T]  взять первую свободную / эту / отпустить
@@ -165,6 +165,7 @@ def parser():
         x.add_argument('--note', default=''); x.add_argument('--section', default='')
         x.add_argument('--opt', action='append', default=[]); x.add_argument('--force', action='store_true')
         x.add_argument('--act', action='store_true'); x.add_argument('--run', default='')
+        x.add_argument('--how', default=''); x.add_argument('--where', default='')
     st = sp('set'); st.add_argument('ref'); st.add_argument('rest', nargs='+')
     bt = sp('batch'); bt.add_argument('ref')
     ak = sp('ack'); ak.add_argument('ref'); ak.add_argument('n', nargs='+')
@@ -509,8 +510,13 @@ def add(cfg, a):
     d = resolve(cfg, a.ref)
     fields = _item_fields(a.pairs)
     if a.cmd == 'act' or a.act:   # ожидаемое действие владельца — вопрос вида act: те же ответ, «проще», отправка
-        n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt or ['Сделал', 'Не буду'],
-                          {'act': True, **({'cmd': a.run} if a.run else {})})
+        # владелец должен понять, что и где сделать, не спрашивая (28.10): команда или шаги — обязательно
+        if not (a.run or a.how):
+            raise ValueError('действие без команды и шагов: --run "команда" [--where PowerShell|cmd|Git Bash] или '
+                             '--how "что сделать по шагам"; заводить, только когда его можно выполнить сейчас')
+        extra = {'act': True, **({'cmd': a.run, 'where': a.where or 'PowerShell'} if a.run else {}),
+                 **({'how': a.how} if a.how else {})}
+        n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt or ['Сделал', 'Не буду'], extra)
         return f'ok пункт {n}'
     if a.cmd == 'ask' or a.ask:
         n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt)

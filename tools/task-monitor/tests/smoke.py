@@ -48,6 +48,8 @@ check('set неверный статус → ошибка', tm('set', 'a1', '2',
 check('show', '2 todo' in tm('show', 'a1')[1] or 'два' in tm('show', 'a1')[1])
 code, out = tm('act', 'a1', 'Запустить установщик', '--run', 'py install.py', '--note', 'чтобы включился хук')
 check('act: ожидаемое действие', out == 'ok пункт 6', out)
+code, out = tm('act', 'a1', 'Сделать что-то', '--note', 'потом')
+check('act без команды и шагов отклонён', code == 1 and '--run' in out and '--how' in out, out)
 
 # захваты ресурсов: отказ с очередью, продление, снятие, сброс после перезагрузки
 check('hold', tm('hold', 'ИБ dev', 'обновление', '--ttl', '20m', sid='A')[1].startswith('ok держу: ИБ dev до '))
