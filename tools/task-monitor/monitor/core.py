@@ -379,6 +379,31 @@ def git_root(path):
         p = up
 
 
+
+_agents = {'at': 0, 'list': [], 'error': ''}
+
+
+def claude_sessions(max_age=3.0):
+    """Живые сессии Claude Code из документированного `claude agents --json` (code.claude.com/docs/en/agent-view):
+    [{sessionId, pid, name, status, cwd, kind, startedAt}]. Внутренний реестр ~/.claude/sessions не читаем — формат
+    не документирован (решение владельца 28.10). Кэш на max_age секунд: команда идёт 0,2 с. Ошибка — [] и текст в
+    _agents['error'], панель её покажет."""
+    import shutil
+    import subprocess
+    now = time.time()
+    if now - _agents['at'] < max_age:
+        return _agents['list']
+    exe = shutil.which('claude') or os.path.expanduser('~/.local/bin/claude.exe')
+    try:
+        p = subprocess.run([exe, 'agents', '--json'], capture_output=True, timeout=15,
+                           creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        data = json.loads(p.stdout.decode('utf-8', 'replace') or '[]')
+        _agents.update(at=now, list=[a for a in data if isinstance(a, dict)], error='' if p.returncode == 0 else f'claude agents: код {p.returncode}')
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
+        _agents.update(at=now, list=[], error=f'claude agents --json: {type(e).__name__}')
+    return _agents['list']
+
+
 def boot_ms():
     """Время загрузки системы (мс эпохи): захват, записанный раньше, остался от прошлого запуска Windows."""
     if sys.platform == 'win32':

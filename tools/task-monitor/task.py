@@ -32,7 +32,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from monitor.core import expand, in_tab_root, load_config, log_call, model_on, module_hooks, module_on, module_settings, modules, read_json, require, session_id, sources  # noqa: E402
+from monitor.core import claude_sessions, expand, in_tab_root, load_config, log_call, model_on, module_hooks, module_on, module_settings, modules, read_json, require, session_id, sources  # noqa: E402
 from monitor import questions  # noqa: E402
 from monitor.sources import tabs  # noqa: E402
 
@@ -201,9 +201,7 @@ def ttl_sec(text):
 def res_cmd(cfg, a):
     """hold / free / held — захваты ресурсов (modules/claims)."""
     claims = require(cfg, 'claims')
-    reg = expand(module_settings(cfg, 'sessions').get('registry', '~/.claude/sessions'))
-    names = {r['sessionId']: r.get('name') or r['sessionId'][:8]
-             for r in (read_json(x) or {} for x in glob.glob(os.path.join(reg, '*.json'))) if r.get('sessionId')}
+    names = {r['sessionId']: r.get('name') or r['sessionId'][:8] for r in claude_sessions() if r.get('sessionId')}
     who = lambda sid: names.get(sid, sid[:8])
     hhmm = lambda ms: time.strftime('%H:%M', time.localtime(ms / 1000))
     if a.cmd == 'held':

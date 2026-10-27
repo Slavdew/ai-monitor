@@ -1,13 +1,13 @@
-"""Живые сессии Claude Code из реестра ~/.claude/sessions/<pid>.json — без хуков и без модели.
+"""Живые сессии Claude Code — из документированного `claude agents --json` (monitor.core.claude_sessions).
 
-Живость — процесс с этим pid существует (на Windows через OpenProcess: os.kill(pid, 0) там шлёт
-Ctrl+C). Последнее сообщение — mtime транскрипта. Привязка к задаче — по cfg sources.sessions.bind.
+Живая — есть pid (команда сама проверяет процесс). Последнее сообщение — mtime транскрипта. Привязка к задаче —
+по cfg sources.sessions.bind. Внутренний реестр ~/.claude/sessions не читаем с 28.10: формат не документирован.
 """
 import glob
 import json
 import os
 
-from monitor.core import expand, now_ms, pid_alive, read_json, write_json
+from monitor.core import claude_sessions, expand, now_ms, pid_alive, read_json, write_json
 
 DAY_MS = 86400000
 
@@ -85,20 +85,19 @@ def collect(cfg, src, ctx):
     saved_path = os.path.join(cfg['state_dir'], 'session-titles.json')
     saved = read_json(saved_path, {}) or {}
     out, now = [], now_ms()
-    for path in glob.glob(os.path.join(expand(src['registry']), '*.json')):
-        r = read_json(path)
-        if not r or 'sessionId' not in r:
+    for r in claude_sessions():
+        if not r.get('sessionId'):
             continue
-        live = alive(int(r['pid']), r.get('procStart'))
+        live = bool(r.get('pid'))
         t = transcript(troot, r['sessionId'])
         last = int(os.path.getmtime(t) * 1000) if t else r.get('updatedAt', 0)
         if not live and now - last > DAY_MS:
             continue
-        name = r.get('name', '') if r.get('nameSource') == 'user' else ''   # derived «ai-ac» — не имя
+        name = ''   # name из agents — адрес («ai-ac»), не название: название — из транскрипта
         s = {'sid': r['sessionId'], 'pid': r['pid'], 'title': name or title(t, r['sessionId'], saved),
              'address': r.get('name', ''),   # по нему адресуют SendMessage, в том числе derived «ai-ac»
              'cwd': r.get('cwd', ''),
-             'entry': r.get('entrypoint', ''), 'status': r.get('status', '') if live else 'dead',
+             'entry': r.get('kind', ''), 'status': r.get('status', '') if live else 'dead',
              'alive': live, 'started': r.get('startedAt', 0), 'last': last, 'task': ''}
         for b in src.get('bind', []):
             hit = BINDERS[b](s, items, ctx.get('claims', {}).get('list', {}))
@@ -110,4 +109,5 @@ def collect(cfg, src, ctx):
     if any(saved.get(k) != v for k, v in fresh.items()):
         write_json(saved_path, {**saved, **fresh})   # название переживает закрытие сессии
     out.sort(key=lambda s: (not s['alive'], -s['started']))   # стабильный порядок: по старту, не по активности
-    return {'list': out}
+    from monitor.core import _agents
+    return {'list': out, **({'error': _agents['error']} if _agents['error'] else {})}

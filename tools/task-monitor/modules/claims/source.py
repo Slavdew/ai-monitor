@@ -2,7 +2,7 @@
 
 <state_dir>/claims/<id>.json = {sid, at}. Создаётся атомарно (O_EXCL), поэтому две сессии не возьмут
 одну задачу. Захват сессии, которой больше нет в живых, считается свободным и перезаписывается.
-Живость — по реестру ~/.claude/sessions; сессия вне реестра (другой агент, TASK_SESSION) жива, пока
+Живость — по `claude agents --json` (monitor.core.claude_sessions); сессия вне списка (другой агент, TASK_SESSION) жива, пока
 захват моложе sources.claims.ttl_sec — каждый вызов task.py этой сессии его продлевает (touch).
 Перезагрузка и закрытие сессии снимают захваты сами: процесс сверяется по времени создания (procStart
 реестра), а захват вне реестра, записанный до загрузки Windows, мёртв сразу, не дожидаясь ttl.
@@ -15,7 +15,7 @@ import json
 import os
 import re
 
-from monitor.core import boot_ms, expand, module_settings, now_ms, read_json, write_json
+from monitor.core import boot_ms, claude_sessions, expand, module_settings, now_ms, read_json, write_json
 from monitor.core import pid_alive as alive
 
 OPEN_SKIP = ('done', 'blocked', 'waiting-owner')   # статусы из шапки HANDOFF, которые не берём
@@ -26,14 +26,9 @@ def _dir(cfg):
 
 
 def _registry(cfg):
-    """{sid: жив ли процесс} по реестру сессий Claude Code."""
-    reg = expand(module_settings(cfg, 'sessions').get('registry', '~/.claude/sessions'))
-    out = {}
-    for path in glob.glob(os.path.join(reg, '*.json')):
-        r = read_json(path) or {}
-        if r.get('sessionId'):
-            out[r['sessionId']] = out.get(r['sessionId']) or alive(int(r.get('pid', 0)), r.get('procStart'))
-    return out
+    """{sid: True} живых сессий Claude Code — по документированному `claude agents --json`."""
+    return {a['sessionId']: True for a in claude_sessions() if a.get('sessionId') and a.get('pid')}
+
 
 
 def _alive(cfg, c, reg):

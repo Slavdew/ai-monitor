@@ -36,6 +36,10 @@ HOOKS = [f'"{PY}" -c "import os,runpy,sys;p=r\'{TASK}\';sys.argv=[p,\'hook\'];x=
 GUARD = os.path.join(REPO, 'tools', 'guards', 'guard.py')
 GUARD_HOOK = (f'"{PY}" -c "import os,runpy,sys;p=r\'{GUARD}\';sys.argv=[p];'
               f'runpy.run_path(p,run_name=\'__main__\') if os.path.isfile(p) else None"')
+# строка состояния: лимиты подписки из документированного rate_limits — в файл панели (modules/usage/statusline.py)
+STATUS = os.path.join(HERE, 'modules', 'usage', 'statusline.py')
+STATUS_CMD = (f'"{PY}" -c "import os,runpy,sys;p=r\'{STATUS}\';sys.argv=[p];'
+              f'runpy.run_path(p,run_name=\'__main__\') if os.path.isfile(p) else None"')
 REPLACED = ('session-board.js',)   # прежние хуки, которые диспетчер заменил: снимаются
 ALLOW = [f'Bash(python {TASK.replace(os.sep, "/")} *)', f'PowerShell(python {TASK} *)']
 OLD = ('plan-board\\plan.py', 'task-monitor\\task.py')
@@ -176,6 +180,13 @@ def main():
     if not any(h.get('command') == GUARD_HOOK for g in pre for h in g['hooks']):
         pre.append({'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': GUARD_HOOK, 'timeout': 5}]})
         new = new + ['guard']   # новым списком: прежний уже лежит в хуках UserPromptSubmit
+    sl = d.get('statusLine') or {}
+    if not sl or 'statusline.py' in sl.get('command', ''):   # своя строка состояния владельца — не трогаем
+        if sl.get('command') != STATUS_CMD:
+            d['statusLine'] = {'type': 'command', 'command': STATUS_CMD}
+            new = new + ['statusLine']
+    else:
+        print('строка состояния уже своя — лимиты в панель не попадут: добавьте в неё вызов', STATUS)
     rules = ALLOW + ([f'Bash({a.name} *)', f'PowerShell({a.name} *)'] if a.name else [])
     allow = d.setdefault('permissions', {}).setdefault('allow', [])
     allow += [r for r in rules if r not in allow]

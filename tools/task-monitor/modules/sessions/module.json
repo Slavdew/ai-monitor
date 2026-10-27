@@ -1,2 +1,2 @@
 { "name": "sessions", "api": 1, "version": "1.0", "title": "Сессии Claude Code", "after": ["tabs", "claims"],
-  "settings": { "registry": "~/.claude/sessions", "transcripts": "~/.claude/projects", "bind": ["claim", "handoff_session", "cwd"] } }
+  "settings": { "transcripts": "~/.claude/projects", "bind": ["claim", "handoff_session", "cwd"] } }
