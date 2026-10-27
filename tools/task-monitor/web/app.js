@@ -100,7 +100,7 @@ function tickAgo() { document.querySelectorAll('.ago').forEach((e) => { e.textCo
 async function post(source, action, args) {
   const r = await fetch(`/api/${source}/${action}`, { method: 'POST', body: JSON.stringify(args) });
   const j = await r.json();
-  if (!r.ok) toast(j.error || 'ошибка', 6000);
+  if (!r.ok) toast(j.error || 'Ошибка', 6000);
   return j;
 }
 function toast(text, ms = 1600) {
@@ -320,7 +320,9 @@ function taskView(i, mode) {
   const head = `<div class="t-head">${prioTag(i)}<span class="id">${esc(i.id)}</span><span class="title" title="${esc(i.title)}">${esc(i.title)}</span>
     <span class="t-chips">${healthTag(i)}${stageTag(i)}${remainTag(i)}${i.status ? `<span class="tag ${esc(i.status)}">${esc(label(i.status))}</span>` : ''}
     ${i.percent != null ? `<span class="bar" title="${i.percent}%"><i style="width:${i.percent}%"></i></span>` : ''}</span>
-    <span class="t-act">${i.resume ? copyBtn(i.resume, 'Продолжить') : ''}${card ? '' : cardBtn(i)}</span></div>`;
+    <span class="t-act"><button class="btn" data-act="reqnew" data-ref="${esc(ref)}" title="Записать просьбу по задаче: агент увидит её непрочитанной и предложит разобрать">+ Просьба</button>${i.resume ? copyBtn(i.resume, 'Продолжить') : ''}${card ? '' : cardBtn(i)}</span></div>
+    ${reqOpen.has(ref) ? `<div class="reqnew"><textarea data-act="reqtext" data-ref="${esc(ref)}" rows="2" placeholder="Просьба своими словами — Ctrl+Enter записать, Esc закрыть">${esc(reqDraft[ref] || '')}</textarea>
+      <button class="btn primary" data-act="reqsave" data-ref="${esc(ref)}" data-dir="${esc(i.dir)}">Записать</button></div>` : ''}`;
 
   // паспорт: суть, где остановились, ход, сведения — всегда на виду
   const facts = [i.changed && `изм. <span class="ago" data-ts="${i.changed}"></span>`,
@@ -568,6 +570,16 @@ function renderCard(ref) {
   const i = findItem(ref);
   return [i ? { key: 'card:' + ref, cls: 'row card', html: taskView(i, 'card') }
     : { key: 'card-none', cls: 'empty', html: `Задача ${esc(ref)} больше не найдена` }];
+}
+
+// просьба владельца из карточки/предпросмотра: пункт req, агент получит её непрочитанной (хук, take, unseen)
+const reqOpen = new Set(), reqDraft = {};
+async function saveReq(ref, dir) {
+  const text = (reqDraft[ref] || '').trim();
+  if (!text) { toast('Пустая просьба'); return; }
+  const r = await post('tabs', 'request', { dir, text });
+  if (!r || r.error) return;   // ошибку уже показал post
+  delete reqDraft[ref]; reqOpen.delete(ref); render(); toast('Просьба записана — агент увидит её непрочитанной');
 }
 
 // keepwarm: общий график (личный поверх общего, его читает keepwarm-gate.js) и настройки сессии под ⚙
@@ -860,6 +872,12 @@ document.addEventListener('click', async (e) => {
     render();
   } else if (a === 'ctab') {
     ctab[t.dataset.ref] = t.dataset.v; store.set('ctab', ctab); render();
+  } else if (a === 'reqnew') {
+    e.stopPropagation();
+    reqOpen.has(t.dataset.ref) ? reqOpen.delete(t.dataset.ref) : reqOpen.add(t.dataset.ref); render();
+    document.querySelector(`textarea[data-act="reqtext"][data-ref="${CSS.escape(t.dataset.ref)}"]`)?.focus();
+  } else if (a === 'reqsave') {
+    e.stopPropagation(); await saveReq(t.dataset.ref, t.dataset.dir);
   } else if (a === 'kwset') {
     kwOpen.has(t.dataset.sid) ? kwOpen.delete(t.dataset.sid) : kwOpen.add(t.dataset.sid); render();
   } else if (a === 'health') {
@@ -937,6 +955,7 @@ document.addEventListener('click', async (e) => {
 // черновик ответа: сохраняется сам через секунду после последней правки и при уходе из поля
 document.addEventListener('input', (e) => {
   const el = e.target;
+  if (el.dataset.act === 'reqtext') { reqDraft[el.dataset.ref] = el.value; return; }
   if (el.dataset.act !== 'draft') return;
   drafts[el.dataset.key] = el.value;
   if (el.tagName === 'TEXTAREA') { el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; }
@@ -1112,6 +1131,9 @@ addEventListener('resize', () => { if (applyPrefs()) render(); });
 new ResizeObserver(() => document.documentElement.style.setProperty('--hh', $('header').offsetHeight + 'px')).observe($('header'));
 
 document.addEventListener('keydown', (e) => {
+  const rq = e.target.dataset?.act === 'reqtext' && e.target;
+  if (rq && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); rq.parentElement.querySelector('[data-act="reqsave"]').click(); return; }
+  if (rq && e.key === 'Escape') { reqOpen.delete(rq.dataset.ref); render(); return; }
   if (e.key === 'Escape') { if (menuEl) closeMenu(true); else if (!$('#viewer').hidden) closeDoc(); return; }
   if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && !e.target.closest('input, textarea, select')) {
     if (openCtx(e.target, e.target.getBoundingClientRect ? e.target : { x: 40, y: 80 })) e.preventDefault();

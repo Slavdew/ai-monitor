@@ -9,6 +9,7 @@ UserPromptSubmit (полный текст — один раз на сессию,
 import json
 import os
 import re
+import time
 
 from monitor.core import front_matter, locked, now_ms, read_json, session_id, write_json
 from monitor.sources import tabs
@@ -117,6 +118,30 @@ def submit(cfg, args):
     return {'ok': True, 'sent': len(sent)}
 
 
+def request(cfg, args):
+    """Просьба владельца со страницы: пункт req (блок «Ваши просьбы») с seen=false и запись в answers.json —
+    агент увидит её хуком, в unseen и при take как непрочитанную и предложит разобрать; ack — прочитано."""
+    text = ' '.join(str(args.get('text', '')).split())
+    if not text:
+        raise ValueError('пустая просьба')
+    at = now_ms()
+    out = {}
+
+    def fn(t):
+        plan = t.setdefault('plan', [])
+        plan.append({'text': text, 'req': True, 'at': time.strftime('%Y-%m-%d'), 'seen': False, 'owner_at': at})
+        out['n'] = len(plan)
+    task = tabs.update_task(cfg, args['dir'], fn)
+    tid = task.get('id') or os.path.basename(args['dir'])
+    with locked(_pending_path(cfg)):
+        pending = read_json(_pending_path(cfg), {}) or {}
+        pending[f'{tid}#{out["n"]}'] = {'dir': args['dir'], 'n': out['n'], 'q': text, 'answers': [], 'kind': 'req', 'at': at}
+        write_json(_pending_path(cfg), pending)
+    with open(os.path.join(cfg['state_dir'], 'events.jsonl'), 'a', encoding='utf-8') as f:
+        f.write(json.dumps({'kind': 'req', 'task': tid, 'items': [out['n']], 'at': at}, ensure_ascii=False) + '\n')
+    return {'ok': True, 'n': out['n']}
+
+
 
 
 def reword(cfg, dir_, n, text):
@@ -149,6 +174,9 @@ def ack(cfg, dir_, nums, done=False):
 def _line(key, r):
     """Ответ строкой с готовой командой: ack a 5 done / set a 7 text="…" и ack."""
     tid, _, n = key.rpartition('#')
+    if r.get('kind') == 'req':
+        return (f'{key}: НОВАЯ ПРОСЬБА ВЛАДЕЛЬЦА: {r["q"]} → предложи владельцу разобрать (взять в работу, '
+                f'уточнить или отложить), затем ack {tid} {n}')
     line = f'{key}: {r["q"]}'
     if r['answers']:
         line += f' | ответ: {" / ".join(r["answers"])}'

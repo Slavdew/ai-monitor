@@ -417,4 +417,5 @@ def _questions():
 
 
 ACTIONS = {'after': lambda cfg, src, a: set_after(cfg, a), 'plan': lambda cfg, src, a: set_plan(cfg, a), 'field': lambda cfg, src, a: set_field(cfg, a),
-           'draft': lambda cfg, src, a: _questions().draft(cfg, a), 'submit': lambda cfg, src, a: _questions().submit(cfg, a)}
+           'draft': lambda cfg, src, a: _questions().draft(cfg, a), 'submit': lambda cfg, src, a: _questions().submit(cfg, a),
+           'request': lambda cfg, src, a: _questions().request(cfg, a)}

@@ -73,6 +73,8 @@ TOPICS = {
       ПЕРЕФРАЗИРОВАТЬ → set T N text="проще", затем ack T N (статус не менять — вопрос ждёт дальше)
   Черновики владельца (draft в task.json) не читать — он ещё думает. Ответ в чате — set T N status=done note="ответ в чате: …".
   req T "просьба его словами" --note "где ведётся"   → ok пункт N; блок «Ваши просьбы», пока не done/skip.
+  Владелец пишет просьбу сам (панель, «+ Просьба») — приходит как ответ: «НОВАЯ ПРОСЬБА ВЛАДЕЛЬЦА …»,
+      в show — [новая]; take задачи печатает непрочитанное сразу. Предложить разобрать, затем ack T N.
   Хук: полный текст — один раз на сессию и только по задачам этой сессии (её вопрос, захват, session в
   HANDOFF, cwd в каталоге задачи); остальное — «ещё ответов в других задачах: N», напоминание — раз в 5 вводов.
   Долгая автономная работа — Monitor на task.py watch --task T (строка на каждую отправку владельца).""",
@@ -407,7 +409,7 @@ def show(cfg, d, all_):
             print(f'# {cur or "(без раздела)"}')
             sec = cur
         mark = ('вопрос: ' if p.get('q') else '') + ('просьба: ' if p.get('req') else '') \
-            + ('[ответ] ' if p.get('seen') is False else '')
+            + (('[новая] ' if p.get('req') else '[ответ] ') if p.get('seen') is False else '')
         text = ' '.join(str(p.get('text', '')).split())
         text = text if len(text) <= 70 else text[:69] + '…'
         print(f'{k + 1} {p.get("status", "todo")} {mark}{text}')
@@ -527,6 +529,10 @@ def run(cfg, a):
             if not claims.claim(cfg, i['id'], sid, a.force):
                 raise ValueError(f'задача {i["id"]} занята другой сессией (--force — забрать)')
             print(f'ok взята: {i["id"]} — {i["title"]}')
+            # непрочитанное по задаче — сразу: новые просьбы и ответы владельца, пока сессии не было
+            for line in questions.unseen(cfg):
+                if line.startswith(i['id'] + '#'):
+                    print(line)
             return
         if a.cmd == 'release':
             mine = [a.ref] if a.ref else [t for t, c in claims.claims(cfg).items() if c['sid'] == sid]
