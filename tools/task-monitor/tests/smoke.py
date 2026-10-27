@@ -1,7 +1,7 @@
 r"""Дымовой тест панели: копия панели во временном каталоге, свой порт и state_dir, без браузера; живую панель,
 её config.local.json и задачи владельца не трогает.  python tests\smoke.py   (код 0 — всё прошло)
 Сценарий: new → add/ask → batch → set (по id) → сервер: state.json, POST draft/submit → hook видит ответ → ack."""
-import json, os, shutil, subprocess, sys, tempfile, time, urllib.request
+import json, os, shutil, subprocess, sys, tempfile, time, urllib.parse, urllib.request
 sys.stdout.reconfigure(encoding='utf-8')   # консоль cp1251 не печатает «→»
 
 SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -101,6 +101,29 @@ try:
     except urllib.error.HTTPError as e:
         check('free без Origin → 403', e.code == 403, e.code)
     check('владелец снимает захват', post('claims', 'free', {'res': 'стенд'}).get('ok') is True)
+    # форма «+ Задача»: каталог вне git — задача и вложения; внутри git — отказ (задачи ведутся вне репозиториев)
+    sys.path.insert(0, SRC)
+    from monitor.core import git_root
+    req = urllib.request.Request(f'{base}/api/tabs/create', json.dumps({'tab': 't', 'kind': 'idea', 'project': 'П', 'title': 'Новая идея'}).encode(),
+                                 {'Origin': base})
+    if git_root(os.path.join(tmp, 'tasks')):
+        try:
+            op.open(req)
+            check('create внутри git → отказ', False)
+        except urllib.error.HTTPError as e:
+            check('create внутри git → отказ', e.code == 400 and 'репозитори' in e.read().decode('utf-8'), e.code)
+    else:
+        r = json.load(op.open(req))
+        t = json.load(open(os.path.join(r['dir'], 'task.json'), encoding='utf-8'))
+        check('create: идея с проектом', t.get('kind') == 'idea' and t.get('project') == 'П' and r['id'] == 'novaya-ideya', t)
+        up = urllib.request.Request(f'{base}/api/tabs/attach?dir={urllib.parse.quote(r["dir"])}&name=..%5Ca%3F.txt', b'abc', {'Origin': base})
+        j = json.load(op.open(up))
+        check('attach: в files, имя без пути', j.get('name') == 'a_.txt' and open(os.path.join(r['dir'], 'files', 'a_.txt'), 'rb').read() == b'abc', j)
+    try:
+        op.open(urllib.request.Request(f'{base}/api/tabs/create', b'{}'))
+        check('create без Origin → 403', False)
+    except urllib.error.HTTPError as e:
+        check('create без Origin → 403', e.code == 403, e.code)
 finally:
     srv.terminate()
 

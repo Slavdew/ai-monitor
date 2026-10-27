@@ -366,6 +366,19 @@ def pid_alive(pid, start=None):
     return bool(ok)
 
 
+def git_root(path):
+    """Корень git-репозитория, внутри которого лежит path, или None. Задачи и вложения ведутся вне
+    репозиториев (владелец 27.10): иначе файлы задач уйдут в коммиты проекта."""
+    p = os.path.abspath(path)
+    while True:
+        if os.path.exists(os.path.join(p, '.git')):
+            return p
+        up = os.path.dirname(p)
+        if up == p:
+            return None
+        p = up
+
+
 def boot_ms():
     """Время загрузки системы (мс эпохи): захват, записанный раньше, остался от прошлого запуска Windows."""
     if sys.platform == 'win32':

@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from monitor.core import HOME, allowed_file, in_tab_root, load_config, log_call, module_on, modules, now_ms, sources  # noqa: E402
+from monitor.sources import tabs  # noqa: E402
 
 def server_log(cfg, text):
     """state_dir/server.log — под pythonw stderr некуда: падения и ошибки цикла видны здесь (≤ 1 МБ, одно поколение)."""
@@ -32,7 +33,7 @@ def server_log(cfg, text):
 
 
 FAILS, PAUSE_SEC = 5, 600   # ошибок модуля подряд до паузы, длина паузы
-OWNER_ONLY = {('tabs', 'draft'), ('tabs', 'submit'), ('tabs', 'request'), ('claims', 'free')}
+OWNER_ONLY = {('tabs', 'draft'), ('tabs', 'submit'), ('tabs', 'request'), ('claims', 'free'), ('tabs', 'create'), ('tabs', 'attach')}
 
 WEB = os.path.join(HOME, 'web')
 TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css'}
@@ -222,7 +223,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._guard(True):
             return
-        parts = self.path.strip('/').split('/')
+        parts = self.path.split('?')[0].strip('/').split('/')   # параметры — только у attach
         if len(parts) != 3 or parts[0] != 'api':
             return self._send(404, b'{}')
         # слова владельца (ответы, черновики, просьбы) — только со страницы: браузер ставит Origin на POST,
@@ -230,12 +231,37 @@ class Handler(BaseHTTPRequestHandler):
         if (parts[1], parts[2]) in OWNER_ONLY and self.headers.get('Origin') is None:
             return self._send(403, json.dumps({'error': 'действие владельца — только со страницы панели'}, ensure_ascii=False).encode())
         size = int(self.headers.get('Content-Length', 0))
+        if (parts[1], parts[2]) == ('tabs', 'attach'):   # вложение — сырое тело потоком, не JSON
+            return self._attach(size)
         if size > 1 << 20:
             return self._send(413, b'{"error": "body"}')
         try:
             args = json.loads(self.rfile.read(size) or b'{}')
             res = hub.act(parts[1], parts[2], args)
             self._send(200, json.dumps(res, ensure_ascii=False).encode())
+        except Exception as e:
+            self._send(400, json.dumps({'error': f'{type(e).__name__}: {e}'}, ensure_ascii=False).encode())
+
+    def _attach(self, size):
+        """POST /api/tabs/attach?dir=…&name=… — файл в <задача>/files/ кусками, без чтения целиком в память."""
+        from urllib.parse import parse_qs, urlsplit
+        q = parse_qs(urlsplit(self.path).query)
+        try:
+            if size > hub.cfg.get('attach_max_mb', 200) << 20:
+                raise ValueError(f'файл больше {hub.cfg.get("attach_max_mb", 200)} МБ')
+            path = tabs.attach_path(hub.cfg, q['dir'][0], q.get('name', [''])[0])
+            with open(path + '.part', 'wb') as f:
+                left = size
+                while left:
+                    chunk = self.rfile.read(min(left, 1 << 20))
+                    if not chunk:
+                        raise ValueError('связь оборвалась')
+                    f.write(chunk)
+                    left -= len(chunk)
+            os.replace(path + '.part', path)
+            log_call(hub.cfg, 'page', 'tabs/attach', {'dir': q['dir'][0], 'name': os.path.basename(path)}, True, 0)
+            hub.kick.set()
+            self._send(200, json.dumps({'ok': True, 'name': os.path.basename(path)}, ensure_ascii=False).encode())
         except Exception as e:
             self._send(400, json.dumps({'error': f'{type(e).__name__}: {e}'}, ensure_ascii=False).encode())
 

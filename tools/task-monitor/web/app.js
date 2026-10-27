@@ -113,6 +113,9 @@ function toast(text, ms = 1600) {
 // --- виды: вкладки из конфига + служебные; новый вид — запись в VIEWS ---
 
 const src = (name) => state.sources[name] || {};
+// идея — вид задачи: вкладка «Идеи» собирает идеи всех проектов, вкладки проектов — только задачи
+// «@ideas» — подвкладка вида, не каталог
+const inTab = (i, t) => (t.id === '@ideas' ? i.kind === 'idea' : i.tab === t.id && i.kind !== 'idea');
 
 function liveSessions(id) {
   const list = (src('sessions').list || []).filter((s) => s.alive && s.task === id);
@@ -516,11 +519,17 @@ function closeDoc() { $('#viewer').hidden = true; $('#vbody').innerHTML = ''; }
 
 // --- вкладки: вкладки с одной group — одной кнопкой, каждая — сворачиваемым разделом ---
 
-function renderGroup(tabs) {
+function renderGroup(groupTabs) {
+  // вкладки группы — каталоги задач; «Идеи» — вид (kind в task.json), собирается из всех каталогов.
+  // Прежний каталог ideas скрыт: его задачи — идеи по умолчанию (tabs.py), пока в них не записан kind
+  const ideas = items().some((i) => i.kind === 'idea') ? [{ id: '@ideas', title: 'Идеи', root: '' }] : [];
+  const tabs = [...groupTabs.filter((t) => t.id !== 'ideas'), ...ideas];
   const rows = [];
   let side = null;
-  const st = subtabs(tabs, (t) => items().filter((i) => i.tab === t.id && !isClosed(i)).length);
-  if (st) rows.push(st.row);
+  const st = subtabs(tabs, (t) => items().filter((i) => inTab(i, t) && !isClosed(i)).length);
+  if (st) rows.push({ ...st.row, html: st.row.html + `<span class="grow"></span><button class="btn sm primary" data-act="newtask" aria-expanded="${!!nt}" title="Новая задача или идея">+ Задача</button>` });
+  renderedGroup = groupTabs.map((t) => t.id);   // каталоги группы — выбор «Каталог» в форме
+  if (nt) rows.push({ key: 'nt', cls: 'row ntform', html: nt.html });
   const shownTabs = st && st.cur ? tabs.filter((t) => t.id === st.cur) : tabs;
   for (const t of shownTabs) {
     const r = renderTab(t, shownTabs.length > 1);
@@ -531,7 +540,7 @@ function renderGroup(tabs) {
 }
 
 function renderTab(tab, sectioned) {
-  const all = (src('tabs').items || []).filter((i) => i.tab === tab.id);
+  const all = (src('tabs').items || []).filter((i) => inTab(i, tab));
   const closedKey = 'closed:' + tab.id;
   const nClosed = all.filter(isClosed).length;
   // закрытые задачи скрыты вместе с поддеревом, пока раздел не раскрыт; выбранная — видна всегда
@@ -692,6 +701,71 @@ function renderBusy() {
   }];
 }
 
+// --- новая задача со страницы (просьба 106): форма, вложения перетаскиванием, вставкой (Ctrl+V) и выбором ---
+// разметка формы не меняется, пока она открыта, — перерисовка панели не стирает ввод; файлы — прямо в DOM
+let nt = null, renderedGroup = [];   // nt — { html, files: [File], tab, kind }
+const isIdea = () => nt?.kind === 'idea';
+function ntOpen(all, cur) {
+  const tabs = all.filter((t) => t.id !== 'ideas');   // прежний каталог идей — не место для новых
+  const ok = tabs.filter((t) => !t.repo);
+  const tab = (ok.find((t) => t.id === cur) || ok[0] || {}).id, kind = cur === '@ideas' ? 'idea' : 'task';
+  const btns = tabs.map((t) => `<button type="button" data-act="nttab" data-v="${esc(t.id)}" aria-pressed="${t.id === tab}"${t.repo ? ` disabled title="Каталог задач внутри репозитория ${esc(t.repo)}: задачи ведутся вне репозиториев — задайте вкладке new_root"` : ` title="${esc(t.new)}"`}>${esc(t.title)}</button>`).join('');
+  // проект — группа в списке; подсказки — проекты существующих задач, по умолчанию — последний в выбранном каталоге
+  const projs = [...new Set(items().map((i) => i.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+  const projOf = (id) => (items().filter((i) => i.tab === id && i.project).sort((a, b) => b.changed - a.changed)[0] || {}).project || '';
+  const proj = projOf(tab);
+  const kbtn = (k, t) => `<button type="button" data-act="ntkind" data-v="${k}" aria-pressed="${k === kind}">${t}</button>`;
+  nt = { tab, kind, files: [], projOf, autoProj: proj, html: `<div class="ntf" id="ntf">
+    <div class="ntrow"><span class="sess">Вид</span><span class="seg" id="ntkinds">${kbtn('task', 'Задача')}${kbtn('idea', 'Идея')}</span>
+      ${tabs.length > 1 ? `<span class="sess">Каталог</span><span class="seg" id="nttabs">${btns}</span>` : ''}</div>
+    ${ok.length ? '' : '<p class="sess">Все каталоги задач внутри репозиториев — новых задач некуда класть. Задайте каталогу new_root вне репозитория.</p>'}
+    <div class="ntrow"><label class="sess grow">Название<input id="nttitle" type="text" placeholder="Например: Экспорт плана в CSV"></label>
+      <label class="sess">Проект<input id="ntproj" type="text" list="ntprojs" value="${esc(proj)}"></label>
+      <datalist id="ntprojs">${projs.map((x) => `<option value="${esc(x)}">`).join('')}</datalist></div>
+    <label class="sess">Описание — зачем и что должно получиться<textarea id="ntgoal" rows="3"></textarea></label>
+    <label class="sess" id="ntplanl"${kind === 'idea' ? ' hidden' : ''}>План — пункт на строку. Можно оставить пустым (агент заполнит сам в начале работы)<textarea id="ntplan" rows="2"></textarea></label>
+    <div class="ntdrop" id="ntdrop">Перетащите файлы сюда, вставьте Ctrl+V или <button type="button" class="linkbtn" data-act="ntpick">выберите</button>
+      <input type="file" id="ntinp" multiple hidden><div class="ntfiles" id="ntfiles"></div></div>
+    <div class="ntrow"><button class="btn primary" data-act="ntsave"${ok.length ? '' : ' disabled'}>Создать</button>
+      <label class="sess" id="ntaskl"${kind === 'idea' ? ' hidden' : ''}><input type="checkbox" id="ntask" checked> Просьба агенту «разобрать задачу»</label>
+      <span class="grow"></span><span class="sess" id="ntstat"></span><button class="btn" data-act="ntcancel">Отмена</button></div></div>` };
+  render();
+  setTimeout(() => $('#nttitle')?.focus(), 0);
+}
+const fsize = (n) => (n < 1048576 ? Math.max(1, Math.round(n / 1024)) + ' КБ' : (n / 1048576).toFixed(1) + ' МБ');
+function ntFiles(list) {
+  if (!nt) return;
+  for (const f of list) if (f.size || f.type) nt.files.push(f);
+  const box = $('#ntfiles');
+  if (box) box.innerHTML = nt.files.map((f, k) => `<span class="tag">${esc(f.name || 'вставка.png')} · ${fsize(f.size)} <button type="button" class="ibtn" data-act="ntdel" data-k="${k}" title="Убрать">×</button></span>`).join('');
+}
+async function ntSave() {
+  const title = $('#nttitle').value.trim();
+  if (!title) { toast('Нужно название'); $('#nttitle').focus(); return; }
+  const stat = $('#ntstat'), btn = $('[data-act="ntsave"]');
+  btn.disabled = true; stat.textContent = 'Создаю…';
+  const r = await post('tabs', 'create', { tab: nt.tab, kind: nt.kind, project: $('#ntproj').value.trim(), title, goal: $('#ntgoal').value,
+    plan: isIdea() ? [] : $('#ntplan').value.split('\n'), ask: !isIdea() && $('#ntask').checked });
+  if (!r.ok) { btn.disabled = false; stat.textContent = ''; return; }
+  const bad = [];
+  for (const [k, f] of nt.files.entries()) {   // по одному: крупный файл не держит память страницы целиком
+    stat.textContent = `Файлы ${k + 1} из ${nt.files.length}…`;
+    const name = f.name || `вставка-${k + 1}.png`;
+    const res = await fetch(`/api/tabs/attach?dir=${encodeURIComponent(r.dir)}&name=${encodeURIComponent(name)}`, { method: 'POST', body: f });
+    if (!res.ok) bad.push(`${name}: ${(await res.json().catch(() => ({}))).error || res.status}`);
+  }
+  const ref = nt.tab + '|' + r.id;
+  nt = null; render();
+  if (bad.length) toast('Задача создана, файлы не легли: ' + bad.join('; '), 8000);
+  else toast(`Создано: ${r.dir}`, 4000);
+  sel[view] = ref; store.set('sel', sel);
+}
+document.addEventListener('dragover', (e) => { const f = e.target.closest?.('#ntf'); if (f) { e.preventDefault(); $('#ntdrop').classList.add('over'); } });
+document.addEventListener('dragleave', (e) => { if (nt && !e.relatedTarget?.closest?.('#ntf')) $('#ntdrop')?.classList.remove('over'); });
+document.addEventListener('drop', (e) => { if (e.target.closest?.('#ntf')) { e.preventDefault(); $('#ntdrop').classList.remove('over'); ntFiles(e.dataTransfer.files); } });
+document.addEventListener('paste', (e) => { if (nt && $('#ntf') && e.clipboardData.files.length) { e.preventDefault(); ntFiles(e.clipboardData.files); } });
+document.addEventListener('change', (e) => { if (e.target.id === 'ntinp') { ntFiles(e.target.files); e.target.value = ''; } });
+
 // --- доска объявлений сессий (навык session-board): смотреть и писать от лица владельца ---
 
 const boardForm = store.get('boardForm', { board: '', hours: 12 });
@@ -739,11 +813,11 @@ const pending = () => items().filter((i) => (i.plan || []).some((p) => p.status 
 function renderInbox() {
   const all = src('tabs').tabs || [];
   const isAsked = (i) => (i.plan || []).some((p) => p.status === 'wait');
-  const st = subtabs(all.filter((t) => items().some((i) => i.tab === t.id && (isAsked(i) || nReq(i)))),
-    (t) => items().filter((i) => i.tab === t.id).reduce((s, i) => s + nWait(i), 0), true);
-  const inTab = (i) => !st || !st.cur || i.tab === st.cur;
-  const asked = items().filter((i) => isAsked(i) && inTab(i));
-  const withReq = items().filter((i) => nReq(i) && inTab(i));
+  const st = subtabs(all.filter((t) => items().some((i) => inTab(i, t) && (isAsked(i) || nReq(i)))),
+    (t) => items().filter((i) => inTab(i, t)).reduce((s, i) => s + nWait(i), 0), true);
+  const inSub = (i) => !st || !st.cur || inTab(i, { id: st.cur });
+  const asked = items().filter((i) => isAsked(i) && inSub(i));
+  const withReq = items().filter((i) => nReq(i) && inSub(i));
   const rows = st ? [st.row] : [];
   const drafted = asked.filter(nDraftOf);
   if (drafted.length > 1) rows.push({ key: 'in-all', cls: 'morep', html: `<button class="btn primary" data-act="submitall">Отправить все (${drafted.reduce((s, i) => s + nDraftOf(i), 0)})</button> <span class="sess">Ответы ${drafted.length} задач одной кнопкой</span>` });
@@ -788,12 +862,12 @@ function kcard(i) {
 }
 function renderKanban() {
   const tabs = src('tabs').tabs || [];
-  const st = subtabs(tabs.filter((t) => items().some((i) => i.tab === t.id)), (t) => items().filter((i) => i.tab === t.id && !isClosed(i)).length);
-  const list = items().filter((i) => !isClosed(i) && (!st || !st.cur || i.tab === st.cur))
+  const st = subtabs(tabs.filter((t) => items().some((i) => inTab(i, t))), (t) => items().filter((i) => inTab(i, t) && !isClosed(i)).length);
+  const list = items().filter((i) => !isClosed(i) && (!st || !st.cur || inTab(i, { id: st.cur })))
     .sort((a, b) => (a.priority || 3) - (b.priority || 3) || nWait(b) - nWait(a) || (b.changed || 0) - (a.changed || 0));
   const cols = KANBAN.map(([id, title]) => ({ id, title, items: [] }));
   for (const i of list) cols[KANBAN.findIndex(([, , f]) => f(i))].items.push(i);
-  const nDone = items().filter((i) => isClosed(i) && (!st || !st.cur || i.tab === st.cur)).length;
+  const nDone = items().filter((i) => isClosed(i) && (!st || !st.cur || inTab(i, { id: st.cur }))).length;
   return [...(st ? [st.row] : []), { key: 'kb', cls: 'kanban', html: cols.map((c) => `<section class="kcol ${c.id}"><h3>${c.title} <span class="cnt">${c.items.length}</span></h3>
     ${c.items.map(kcard).join('') || '<p class="sess">—</p>'}</section>`).join('') + (nDone ? `<section class="kcol done"><h3>Сделано <span class="cnt">${nDone}</span></h3><p class="sess">Закрытые задачи — во вкладке задач, «› закрытые»</p></section>` : '') }];
 }
@@ -976,6 +1050,25 @@ document.addEventListener('click', async (e) => {
     await post(t.dataset.source, 'refresh', {}); toast('Обновляю…');
   } else if (a === 'release') {
     await post('claims', 'release', { task: t.dataset.task });
+  } else if (a === 'newtask') {
+    if (nt) { nt = null; render(); } else ntOpen((src('tabs').tabs || []).filter((t) => (renderedGroup || []).includes(t.id)), (sub[view] || ''));
+  } else if (a === 'nttab') {
+    nt.tab = t.dataset.v;
+    const pi = $('#ntproj');   // проект, подставленный сам, — вслед за каталогом; вписанный вручную не трогаем
+    if (pi.value === nt.autoProj) pi.value = nt.autoProj = nt.projOf(nt.tab);
+    document.querySelectorAll('#nttabs button').forEach((b) => b.setAttribute('aria-pressed', b === t));
+  } else if (a === 'ntkind') {
+    nt.kind = t.dataset.v;
+    document.querySelectorAll('#ntkinds button').forEach((b) => b.setAttribute('aria-pressed', b === t));
+    $('#ntplanl').hidden = $('#ntaskl').hidden = isIdea();
+  } else if (a === 'ntpick') {
+    $('#ntinp').click();
+  } else if (a === 'ntdel') {
+    const f = nt.files; nt.files = []; f.splice(+t.dataset.k, 1); ntFiles(f);
+  } else if (a === 'ntsave') {
+    await ntSave();
+  } else if (a === 'ntcancel') {
+    nt = null; render();
   } else if (a === 'free') {
     await post('claims', 'free', { res: t.dataset.res });
   } else if (a === 'select') {
@@ -1215,6 +1308,10 @@ document.addEventListener('keydown', (e) => {
   const rq = e.target.dataset?.act === 'reqtext' && e.target;
   if (rq && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); rq.parentElement.querySelector('[data-act="reqsave"]').click(); return; }
   if (rq && e.key === 'Escape') { reqOpen.delete(rq.dataset.ref); render(); return; }
+  if (nt && e.target.closest?.('#ntf')) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ntSave(); return; }
+    if (e.key === 'Escape') { nt = null; render(); return; }
+  }
   if (e.key === 'Escape') { if (menuEl) closeMenu(true); else if (!$('#viewer').hidden) closeDoc(); return; }
   if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && !e.target.closest('input, textarea, select')) {
     if (openCtx(e.target, e.target.getBoundingClientRect ? e.target : { x: 40, y: 80 })) e.preventDefault();

@@ -8,7 +8,7 @@ import re
 import shlex
 import time
 
-from monitor.core import CORE_API, front_matter, locked, read_json, read_json_strict, text_paths, write_json
+from monitor.core import CORE_API, front_matter, git_root, in_tab_root, locked, read_json, read_json_strict, text_paths, write_json
 
 
 def _title_goal(text):
@@ -120,6 +120,8 @@ def read_item(dir_, tab, cfg):
         'blocked': task.get('blocked', ''),   # почему стоит (внешнее: ИТ, руководитель)
         'risk': task.get('risk', ''),         # в чём риск: панель показывает по щелчку на «риск»
         'priority': task.get('priority') or 3,
+        # вид: идея — та же задача, вкладка «Идеи» — фильтр по виду; прежняя вкладка ideas — идеи по умолчанию
+        'kind': task.get('kind') or ('idea' if (tab or {}).get('id') == 'ideas' else 'task'),
         'stage': stage,
         'stage_n': f'{secs.index(stage) + 1}/{len(secs)}' if stage in secs and len(secs) > 1 else '',
         'current': (cur or {}).get('text', ''),
@@ -218,7 +220,9 @@ def collect(cfg, src, ctx):
     done = {i['id'] for i in items if i['status'] == 'done' or i['percent'] == 100}
     for i in items:   # блокирующие связи задач: ждёт, пока блокирующая не done
         i['waits'] = [b for b in i['links'].get('blocked_by') or [] if b not in done]
-    tabs = [{'id': t['id'], 'title': t['title'], 'root': t['root'], 'group': t.get('group', '')} for t in cfg.get('tabs', [])]
+    # new — каталог новых задач (форма «+ Задача»), только вне git: иначе repo — где он
+    tabs = [{'id': t['id'], 'title': t['title'], 'root': t['root'], 'group': t.get('group', ''),
+             'new': t.get('new_root') or t['root'], 'repo': git_root(t.get('new_root') or t['root'])} for t in cfg.get('tabs', [])]
     return {'tabs': tabs, 'items': items, 'errors': errors, 'plan_statuses': cfg['plan_statuses']}
 
 
@@ -453,6 +457,78 @@ def _questions():
     return questions
 
 
+
+# --- новая задача со страницы: форма «+ Задача» (просьба 106) ---
+
+_TR = dict(zip('абвгдеёжзийклмнопрстуфхцчшщъыьэюя',
+               ['a', 'b', 'v', 'g', 'd', 'e', 'e', 'zh', 'z', 'i', 'y', 'k', 'l', 'm', 'n', 'o', 'p', 'r', 's', 't', 'u',
+                'f', 'h', 'ts', 'ch', 'sh', 'sch', '', 'y', '', 'e', 'yu', 'ya']))
+
+
+def slug(title):
+    """Название → id каталога: латиница, дефисы, до 40 знаков («Экспорт плана» → eksport-plana)."""
+    s = ''.join(_TR.get(ch, ch) for ch in title.lower())
+    s = re.sub(r'[^a-z0-9]+', '-', s).strip('-')[:40].strip('-')
+    return s or time.strftime('task-%Y%m%d-%H%M')
+
+
+def new_root(cfg, tab_id):
+    """Каталог новых задач вкладки (new_root, иначе root) — только вне git-репозитория."""
+    tab = next((t for t in cfg.get('tabs', []) if t['id'] == tab_id), None)
+    if not tab:
+        raise ValueError(f'нет вкладки {tab_id}')
+    root = tab.get('new_root') or tab['root']
+    repo = git_root(root)
+    if repo:
+        raise ValueError(f'каталог задач вкладки «{tab["title"]}» внутри репозитория {repo}: задачи ведутся вне '
+                         f'репозиториев — задайте вкладке new_root (или root) вне него')
+    return root
+
+
+def create(cfg, args):
+    """{tab, kind, project, title, goal, plan: [строки], ask: bool} → {dir, id}. tab — каталог задач. kind=idea — идея (вид задачи). ask — просьба агенту «разобрать задачу»."""
+    title = (args.get('title') or '').strip()
+    if not title:
+        raise ValueError('нужно название')
+    root = new_root(cfg, args['tab'])
+    base = slug(title)
+    d, k = os.path.join(root, base), 2
+    while os.path.exists(d):
+        d, k = os.path.join(root, f'{base}-{k}'), k + 1
+    os.makedirs(d)
+    plan = [{'text': x.strip(), 'status': 'todo'} for x in args.get('plan') or [] if x.strip()]
+    if args.get('ask'):
+        plan.append({'text': 'Разобрать задачу: цель, план, вопросы владельцу', 'req': True,
+                     'at': time.strftime('%Y-%m-%d'), 'seen': False})
+
+    def fn(t):
+        t.update({'id': os.path.basename(d), 'title': title, 'plan': plan})
+        if args.get('kind') == 'idea':
+            t['kind'] = 'idea'
+        if (args.get('project') or '').strip():
+            t['project'] = args['project'].strip()
+        if (args.get('goal') or '').strip():
+            t['goal'] = args['goal'].strip()
+    update_task(cfg, d, fn)
+    return {'ok': True, 'dir': d, 'id': os.path.basename(d)}
+
+
+def attach_path(cfg, dir_, name):
+    """Куда положить вложение: <задача>/files/<имя>, имя без пути; занято — «имя (2).ext». Копия, не ссылка:
+    исходник можно удалить, задача его не потеряет (владелец 27.10)."""
+    if not in_tab_root(cfg, dir_) or not os.path.isfile(_task_path(cfg, dir_)):
+        raise PermissionError('каталог не задача панели')
+    if git_root(dir_):
+        raise PermissionError('задача внутри репозитория: вложения туда не кладём')
+    name = re.sub(r'[\\/:*?"<>|\x00-\x1f]', '_', os.path.basename(name or '')).strip(' .') or 'file'
+    d = os.path.join(dir_, 'files')
+    os.makedirs(d, exist_ok=True)
+    stem, ext = os.path.splitext(name)
+    path, k = os.path.join(d, name), 2
+    while os.path.exists(path):
+        path, k = os.path.join(d, f'{stem} ({k}){ext}'), k + 1
+    return path
+
 ACTIONS = {'after': lambda cfg, src, a: set_after(cfg, a), 'plan': lambda cfg, src, a: set_plan(cfg, a), 'field': lambda cfg, src, a: set_field(cfg, a),
            'draft': lambda cfg, src, a: _questions().draft(cfg, a), 'submit': lambda cfg, src, a: _questions().submit(cfg, a),
-           'request': lambda cfg, src, a: _questions().request(cfg, a)}
+           'request': lambda cfg, src, a: _questions().request(cfg, a), 'create': lambda cfg, src, a: create(cfg, a)}
