@@ -459,7 +459,7 @@ function itemRow(i, child, kids, last) {
       ${prioTag(i)}<span class="id">${esc(i.id)}</span><span class="title" title="${esc(i.title)}">${esc(i.title)}</span>${stageTag(i)}${healthTag(i)}
       <span class="grow"></span>
       ${i.parent_kind === 'link' ? `<span class="tag link">→ ${esc(i.parent)}</span>` : ''}
-      ${nWait(i) ? `<span class="tag wait" title="Вопросы ждут вашего ответа">Ждут вас: ${nWait(i)}</span>` : ''}${nAct(i) ? `<span class="tag wait" title="Агент ждёт от вас действий">Действия: ${nAct(i)}</span>` : ''}
+      ${nWait(i) ? `<span class="tag wait" title="Вопросы ждут вашего ответа">Вопросы: ${nWait(i)}</span>` : ''}${nAct(i) ? `<span class="tag wait" title="Агент ждёт от вас действий">Действия: ${nAct(i)}</span>` : ''}
       ${nReq(i) ? `<span class="tag req" title="Ваши просьбы, ещё не сделанные">Просьбы: ${nReq(i)}</span>` : ''}
       ${(i.waits || []).length ? `<span class="tag blocked" title="Заблокирована незавершёнными задачами">⏳ Ждёт ${esc(i.waits.join(', '))}</span>` : ''}
       ${claimTag(i)} ${holdTags(i)}
@@ -892,7 +892,7 @@ function renderInbox() {
     const n = nWait(i), done = (i.plan || []).filter((p) => p.status === 'wait' && !p.act).length - n;
     rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
-        ${n ? `<span class="tag wait">Ждут вас: ${n}</span>` : ''}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
+        ${n ? `<span class="tag wait">Вопросы: ${n}</span>` : ''}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
         ${open ? `<ul class="plan">${asks}</ul>${submitHtml(i)}` : ''}` });
   }
   // просьбы владельца ждут агента, не его — внизу свёрнутой строкой, чтобы видеть неразобранное
@@ -923,7 +923,7 @@ function kcard(i) {
     <div class="kt">${esc(i.title)}</div>
     ${cur ? `<div class="ks" title="${esc(cur.name)}: сделано ${cur.done} из ${cur.total}">● ${esc(cur.name)} <span class="sess">· этап ${cur.n} из ${cur.of}</span></div>` : i.stage ? `<div class="ks">${md(i.stage, true, i)}</div>` : ''}
     ${i.next ? `<div class="kn">${md(i.next, true, i)}</div>` : ''}
-    <div class="kf">${nWait(i) ? `<span class="tag wait">Ждут вас: ${nWait(i)}</span>` : ''}${remainTag(i)}
+    <div class="kf">${nWait(i) ? `<span class="tag wait">Вопросы: ${nWait(i)}</span>` : ''}${nAct(i) ? `<span class="tag wait">Действия: ${nAct(i)}</span>` : ''}${remainTag(i)}
       ${i.percent != null ? `<span class="bar" title="${i.percent}%"><i style="width:${i.percent}%"></i></span>` : ''}</div></div>`;
 }
 function renderKanban() {
