@@ -99,19 +99,24 @@ def submit(cfg, args):
             if text or rephrase is not None:
                 p['seen'] = False
                 sent.append((k, p))
+        if not sent:
+            return
+        # очередь агентам — до записи задачи (внутри её замка): не записалась — задача не тронута, черновики
+        # остались и отправка повторится; иначе ответ ушёл бы в task.json, а агент о нём не узнал (аудит 27.10)
+        tid = t.get('id') or os.path.basename(args['dir'])
+        with locked(_pending_path(cfg)):
+            pending = read_json(_pending_path(cfg), {}) or {}
+            for k, p in sent:
+                stamps = [a['at'] for a in p.get('answers', [])] + ([p['rephrase']['at']] if p.get('rephrase') else [])
+                pending[f'{tid}#{k + 1}'] = {'dir': args['dir'], 'n': k + 1, 'q': p['text'],
+                                            'answers': [a['text'] for a in p.get('answers', [])],
+                                            'rephrase': (p.get('rephrase') or {}).get('text'), 'at': max(stamps),
+                                            **({'by': p['by']} if p.get('by') else {})}
+            write_json(_pending_path(cfg), pending)
     task = tabs.update_task(cfg, args['dir'], fn)
     if not sent:
         return {'ok': True, 'sent': 0}
     tid = task.get('id') or os.path.basename(args['dir'])
-    with locked(_pending_path(cfg)):
-        pending = read_json(_pending_path(cfg), {}) or {}
-        for k, p in sent:
-            stamps = [a['at'] for a in p.get('answers', [])] + ([p['rephrase']['at']] if p.get('rephrase') else [])
-            pending[f'{tid}#{k + 1}'] = {'dir': args['dir'], 'n': k + 1, 'q': p['text'],
-                                        'answers': [a['text'] for a in p.get('answers', [])],
-                                        'rephrase': (p.get('rephrase') or {}).get('text'), 'at': max(stamps),
-                                        **({'by': p['by']} if p.get('by') else {})}
-        write_json(_pending_path(cfg), pending)
     with open(os.path.join(cfg['state_dir'], 'events.jsonl'), 'a', encoding='utf-8') as f:
         f.write(json.dumps({'kind': 'submit', 'task': tid, 'items': [k + 1 for k, _ in sent], 'at': now_ms()},
                            ensure_ascii=False) + '\n')
@@ -131,12 +136,13 @@ def request(cfg, args):
         plan = t.setdefault('plan', [])
         plan.append({'text': text, 'req': True, 'at': time.strftime('%Y-%m-%d'), 'seen': False, 'owner_at': at})
         out['n'] = len(plan)
-    task = tabs.update_task(cfg, args['dir'], fn)
-    tid = task.get('id') or os.path.basename(args['dir'])
-    with locked(_pending_path(cfg)):
-        pending = read_json(_pending_path(cfg), {}) or {}
-        pending[f'{tid}#{out["n"]}'] = {'dir': args['dir'], 'n': out['n'], 'q': text, 'answers': [], 'kind': 'req', 'at': at}
-        write_json(_pending_path(cfg), pending)
+        out['tid'] = t.get('id') or os.path.basename(args['dir'])
+        with locked(_pending_path(cfg)):   # до записи задачи, как в submit: не записалось — просьбы нет нигде
+            pending = read_json(_pending_path(cfg), {}) or {}
+            pending[f'{out["tid"]}#{out["n"]}'] = {'dir': args['dir'], 'n': out['n'], 'q': text, 'answers': [], 'kind': 'req', 'at': at}
+            write_json(_pending_path(cfg), pending)
+    tabs.update_task(cfg, args['dir'], fn)
+    tid = out['tid']
     with open(os.path.join(cfg['state_dir'], 'events.jsonl'), 'a', encoding='utf-8') as f:
         f.write(json.dumps({'kind': 'req', 'task': tid, 'items': [out['n']], 'at': at}, ensure_ascii=False) + '\n')
     return {'ok': True, 'n': out['n']}

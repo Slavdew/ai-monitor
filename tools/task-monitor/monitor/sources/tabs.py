@@ -7,7 +7,7 @@ import os
 import re
 import shlex
 
-from monitor.core import CORE_API, front_matter, locked, read_json, text_paths, write_json
+from monitor.core import CORE_API, front_matter, locked, read_json, read_json_strict, text_paths, write_json
 
 
 def _title_goal(text):
@@ -87,7 +87,7 @@ def _docs(dir_, task, it):
 
 def read_item(dir_, tab, cfg):
     it = cfg['item']
-    task = read_json(os.path.join(dir_, it['task_file']), {}) or {}
+    task = read_json_strict(os.path.join(dir_, it['task_file']))   # испорчен — ошибкой на строке задачи, не пустой задачей
     hpath = os.path.join(dir_, it['handoff_file'])
     hmeta, _ = front_matter(hpath)
     title, goal = '', ''
@@ -160,7 +160,12 @@ def scan_tab(tab, cfg):
         if depth >= it['max_depth']:
             dirs[:] = []
         if depth and any(m in files for m in it['markers']):
-            items.append(read_item(dir_, tab, cfg))
+            try:
+                items.append(read_item(dir_, tab, cfg))
+            except Exception as e:   # одна испорченная задача не прячет остальные
+                items.append({'id': os.path.basename(dir_), 'tab': tab['id'], 'dir': dir_, 'title': os.path.basename(dir_),
+                              'error': f'{type(e).__name__}: {e}', 'plan': [], 'links': {}, 'docs': [], 'status': '',
+                              'percent': None, 'priority': 3, 'project': '', 'paths': {}})
     return items, ''
 
 
@@ -203,7 +208,7 @@ def update_task(cfg, dir_, fn):
     ядро не перезаписывает, чтобы не потерять незнакомые поля (A17)."""
     path = _task_path(cfg, dir_)
     with locked(path):
-        task = read_json(path, {}) or {}
+        task = read_json_strict(path)
         if int(task.get('v') or 0) > CORE_API:
             raise ValueError(f'task.json формата v{task["v"]}, ядро панели — v{CORE_API}: обновите панель')
         fn(task)

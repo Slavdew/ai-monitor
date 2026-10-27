@@ -39,9 +39,13 @@ def load(path):
 
 
 def save(path, d):
-    with open(path, 'w', encoding='utf-8') as f:
+    """Через временный файл и с копией прежнего (<файл>.bak): settings.json Claude Code не должен остаться обрезанным."""
+    if os.path.exists(path):
+        shutil.copy2(path, path + '.bak')
+    with open(path + '.tmp', 'w', encoding='utf-8') as f:
         json.dump(d, f, ensure_ascii=False, indent=2)
         f.write('\n')
+    os.replace(path + '.tmp', path)
 
 
 SKILL_TASK = '<repo>/tools/task-monitor/task.py'   # путь в SKILL.md репозитория

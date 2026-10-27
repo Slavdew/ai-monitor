@@ -12,10 +12,23 @@ import re
 import sys
 import threading
 import time
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from monitor.core import HOME, allowed_file, in_tab_root, load_config, log_call, module_on, modules, now_ms, sources  # noqa: E402
+
+def server_log(cfg, text):
+    """state_dir/server.log — под pythonw stderr некуда: падения и ошибки цикла видны здесь (≤ 1 МБ, одно поколение)."""
+    try:
+        path = os.path.join(cfg['state_dir'], 'server.log')
+        if os.path.exists(path) and os.path.getsize(path) > 1 << 20:
+            os.replace(path, path + '.1')
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(time.strftime('%Y-%m-%d %H:%M:%S ') + text.rstrip() + '\n')
+    except OSError:
+        pass
+
 
 FAILS, PAUSE_SEC = 5, 600   # ошибок модуля подряд до паузы, длина паузы
 OWNER_ONLY = {('tabs', 'draft'), ('tabs', 'submit'), ('tabs', 'request')}
@@ -84,7 +97,7 @@ class Hub:
                     'on': module_on(self.cfg, n), 'error': r['error'], 'dir': r['dir']}
                 for n, r in modules(self.cfg).items()}
         ctx_all = {**ctx, 'core': {'modules': mods}}
-        raw = json.dumps(ctx_all, ensure_ascii=False, sort_keys=True)
+        raw = json.dumps(ctx_all, ensure_ascii=False, sort_keys=True, default=str)
         digest = hashlib.sha1(raw.encode()).hexdigest()
         if digest != self.digest:
             with self.changed:
@@ -96,7 +109,10 @@ class Hub:
 
     def _loop(self):
         while True:
-            self.collect()
+            try:
+                self.collect()
+            except Exception:   # иначе цикл умер бы молча, а страница показывала бы старое как свежее
+                server_log(self.cfg, traceback.format_exc())
             self.kick.wait(self.cfg.get('tick_sec', 2))
             self.kick.clear()
 
@@ -217,4 +233,8 @@ if __name__ == '__main__':
     port = hub.cfg.get('port', 8765)
     print(f'task-monitor: http://127.0.0.1:{port}', flush=True)
     ThreadingHTTPServer.allow_reuse_address = False   # на Windows иначе молча делит порт с чужим сервером
-    ThreadingHTTPServer(('127.0.0.1', port), Handler).serve_forever()
+    try:
+        ThreadingHTTPServer(('127.0.0.1', port), Handler).serve_forever()
+    except Exception:   # порт занят и т. п. — под pythonw иначе без следа
+        server_log(hub.cfg, traceback.format_exc())
+        raise

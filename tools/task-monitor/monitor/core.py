@@ -72,13 +72,37 @@ def locked(path, tries=40, wait=0.05, stale=10):
             pass
 
 
+def read_json_strict(path):
+    """Как read_json, но «файла нет» ({}) и «файл испорчен» (ошибка) различаются: битый файл не перезаписывать
+    пустым — план пропал бы молча (аудит надёжности 27.10)."""
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding='utf-8-sig') as f:
+            return json.load(f)
+    except (UnicodeDecodeError, ValueError) as e:
+        raise ValueError(f'{path} испорчен ({type(e).__name__}) — правка не записана, исправьте файл или верните из git') from None
+
+
 def write_json(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
-    with os.fdopen(fd, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write('\n')
-    os.replace(tmp, path)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write('\n')
+        # на Windows replace падает, пока файл открыт читателем (сервер, антивирус, OneDrive) — повтор до ~1 с
+        for k in range(20):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if k == 19:
+                    raise
+                time.sleep(0.05)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 PERSONAL = '%LOCALAPPDATA%/claude-task-monitor/settings.json'
@@ -344,7 +368,7 @@ def model_on(cfg, feature):
 def front_matter(path):
     """YAML-шапка Markdown, только плоские `ключ: значение` — больше HANDOFF.md не нужно."""
     try:
-        with open(path, encoding='utf-8-sig') as f:
+        with open(path, encoding='utf-8-sig', errors='replace') as f:   # README в cp1251 — норма в 1С, не повод ронять вкладку
             text = f.read(16384)
     except OSError:
         return {}, ''

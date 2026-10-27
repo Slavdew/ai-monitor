@@ -261,6 +261,7 @@ const HEALTH = {
 const healthKind = (i) => (i.health === 'blocked' || i.blocked ? 'blocked' : i.health === 'risk' ? 'risk' : '');
 const healthWhy = (i) => (healthKind(i) === 'blocked' ? i.blocked : i.risk) || '';
 const healthTag = (i) => {
+  if (i.error) return `<span class="tag bad" title="${esc('Файл задачи не прочитан: ' + i.error)}">⚠ Ошибка файла</span>`;
   const k = healthKind(i);
   if (!k) return '';
   const [txt, cls, about] = HEALTH[k], why = healthWhy(i);
