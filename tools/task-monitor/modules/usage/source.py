@@ -22,7 +22,10 @@ def _past(iso):
 def collect(cfg, src, ctx):
     data = read_json(os.path.join(cfg['state_dir'], 'usage.json'), None)
     if not data or not data.get('limits'):
-        return {'error': 'нет данных: строка состояния Claude Code ещё не передавала лимиты (только Pro и Max, '
-                         'после первого ответа в сессии; ставит install.py)'}
+        seen = read_json(os.path.join(cfg['state_dir'], 'statusline-seen.json'), None)
+        why = ('строка состояния вызывалась, но лимитов не передала (только Pro и Max, после первого ответа)' if seen
+               else 'строка состояния ещё не вызывалась: она подхватывается при запуске сессии — перезапустите '
+                    'сессию после install.py; окно VS Code может её не запускать, тогда лимиты придут от сессии в терминале')
+        return {'empty': True, 'note': why}
     limits = [dict(x, percent=0, reset=True) if _past(x.get('resets_at')) else x for x in data['limits']]
     return {'limits': limits, 'ok_at': data.get('ok_at')}

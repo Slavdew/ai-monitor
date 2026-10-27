@@ -985,7 +985,9 @@ function renderLimits() {
       <span class="lbar" aria-hidden="true"><i style="width:${Math.min(100, Math.max(0, +l.percent || 0))}%"></i></span></span>`,
   }));
   const hhmm = (ms) => new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  const info = [u.ok_at && `обновлено ${hhmm(u.ok_at)}`, u.error && `ошибка ${hhmm(u.error_at)}: ${u.error}`].filter(Boolean).join('\n');
+  const info = [u.ok_at && `обновлено ${hhmm(u.ok_at)}`, u.error && `ошибка ${hhmm(u.error_at)}: ${u.error}`, u.note].filter(Boolean).join('\n');
+  // данных ещё нет — не ошибка: серым, причина — в «i» (строка состояния не вызывалась или без лимитов)
+  if (u.empty) rows.push({ key: 'empty', cls: 'lim', html: `<span class="sess" title="${esc(u.note || '')}">лимиты: нет данных</span>` });
   if (u.ok_at) rows.push({ key: 'at', html: `<span title="Последнее удачное обновление лимитов">${hhmm(u.ok_at)}</span>` });
   if (u.error) rows.push({ key: 'err', cls: u.limits ? 'stale' : 'err', html: u.limits ? 'устарело ⚠' : 'лимиты не загрузились' });
   if (info) rows.push({ key: 'info', html: `<button class="ibtn${u.error && !u.limits ? ' bad' : ''}" data-act="info" data-text="${esc(info)}" title="${esc(info)}">i</button>` });

@@ -32,12 +32,15 @@ def main():
             limits.append({'kind': kind, 'label': label, 'percent': round(float(w['used_percentage'])),
                            # ISO со смещением «+03:00»: «+0300» браузер разбирает не везде
                            'resets_at': datetime.fromtimestamp(at).astimezone().isoformat() if at else None})
-    if limits:
-        try:
-            write_json(os.path.join(load_config()['state_dir'], 'usage.json'),
-                       {'limits': limits, 'ok_at': int(time.time() * 1000)})
-        except Exception:   # строка состояния не должна падать из-за панели
-            pass
+    try:
+        state = load_config()['state_dir']
+        # след каждого вызова, даже без лимитов: видно, запускает ли Claude Code строку состояния вообще
+        write_json(os.path.join(state, 'statusline-seen.json'), {'at': int(time.time() * 1000), 'limits': bool(limits),
+                                                                 'session': data.get('session_id', '')})
+        if limits:
+            write_json(os.path.join(state, 'usage.json'), {'limits': limits, 'ok_at': int(time.time() * 1000)})
+    except Exception:   # строка состояния не должна падать из-за панели
+        pass
     model = (data.get('model') or {}).get('display_name') or ''
     print(' · '.join([model] + [f'{x["label"]} {x["percent"]}%' for x in limits]).strip(' ·'))
 
