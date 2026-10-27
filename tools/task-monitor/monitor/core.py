@@ -340,8 +340,11 @@ def require(cfg, name):
     return rec['mod']
 
 
-def pid_alive(pid):
-    """Процесс с этим pid жив (на Windows через OpenProcess: os.kill(pid, 0) там шлёт Ctrl+C)."""
+def pid_alive(pid, start=None):
+    """Процесс с этим pid жив (на Windows через OpenProcess: os.kill(pid, 0) там шлёт Ctrl+C).
+
+    start — время создания процесса (FILETIME, procStart реестра сессий): после перезагрузки или закрытия
+    сессии pid достаётся чужому процессу, и без сверки времени мёртвая сессия считалась бы живой."""
     if sys.platform != 'win32':
         try:
             os.kill(pid, 0)
@@ -354,9 +357,27 @@ def pid_alive(pid):
     if not h:
         return False
     code = ctypes.c_ulong()
-    ok = k.GetExitCodeProcess(h, ctypes.byref(code))
+    ok = k.GetExitCodeProcess(h, ctypes.byref(code)) and code.value == 259   # STILL_ACTIVE
+    if ok and start:
+        t = [ctypes.c_ulonglong() for _ in range(4)]   # создание, выход, ядро, пользователь
+        if k.GetProcessTimes(h, *[ctypes.byref(x) for x in t]):
+            ok = abs(t[0].value - int(start)) < 10_000_000   # в пределах секунды: реестр пишет то же значение
     k.CloseHandle(h)
-    return bool(ok) and code.value == 259   # STILL_ACTIVE
+    return bool(ok)
+
+
+def boot_ms():
+    """Время загрузки системы (мс эпохи): захват, записанный раньше, остался от прошлого запуска Windows."""
+    if sys.platform == 'win32':
+        import ctypes
+        f = ctypes.windll.kernel32.GetTickCount64
+        f.restype = ctypes.c_ulonglong
+        return now_ms() - f()
+    try:
+        with open('/proc/uptime') as fh:
+            return now_ms() - int(float(fh.read().split()[0]) * 1000)
+    except OSError:
+        return 0
 
 
 def model_on(cfg, feature):

@@ -129,6 +129,19 @@ function claimTag(i, release) {
     + (release ? ` <button class="ibtn" data-act="release" data-task="${esc(i.id)}" title="Отпустить захват">×</button>` : '');
 }
 
+// захваты ресурсов (task.py hold): ИБ, стенд, ветка — кто держит, до какого времени, кто ждёт
+const holds = () => Object.values(src('claims').res || {});
+const sessName = (sid) => { const s = (src('sessions').list || []).find((x) => x.sid === sid); return s ? (s.title || sid.slice(0, 8)) : sid.slice(0, 8); };
+const hhmm = (ms) => new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const holdTip = (h) => `${sessName(h.sid)}${h.why ? ' — ' + h.why : ''}, с ${hhmm(h.since)}${h.until ? ', до ' + hhmm(h.until) : ''}`;
+function holdTags(i) {
+  const mine = holds().filter((h) => h.task === i.id).map((h) =>
+    `<span class="tag hold" title="${esc(holdTip(h))}">Держит: ${esc(h.res)}${h.until ? ' · до ' + hhmm(h.until) : ''}</span>`);
+  const waits = holds().filter((h) => (h.queue || []).some((q) => q.task === i.id)).map((h) =>
+    `<span class="tag wait" title="Занято: ${esc(holdTip(h))}">Ждёт: ${esc(h.res)} (${esc(sessName(h.sid))})</span>`);
+  return [...mine, ...waits].join(' ');
+}
+
 const cardBtn = (i) => `<button class="ibtn go" data-act="card" data-ref="${esc(i.tab + '|' + i.id)}" title="Открыть карточку задачи" aria-label="Открыть карточку задачи"><svg viewBox="0 0 16 16" width="13" height="13" style="display:block;margin:auto" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6.6" cy="6.6" r="4.2"/><path d="m9.8 9.8 3.8 3.8"/></svg></button>`;
 
 // --- вопросы владельцу: пункт плана q; ответ черновиком (сохраняется сам), «Отправить Claude» — пачкой по задаче ---
@@ -335,7 +348,7 @@ function taskView(i, mode) {
   // паспорт: суть, где остановились, ход, сведения — всегда на виду
   const facts = [i.changed && `изм. <span class="ago" data-ts="${i.changed}"></span>`,
     i.updated && `handoff ${esc(String(i.updated).slice(0, 10))}${i.stale ? ' <span class="tag stale" title="Файлы новее handoff">Устарел</span>' : ''}`,
-    i.project && esc(i.project), s.n && `<b class="live">●${s.n}</b> ${names.join(', ')}`, claimTag(i, card),
+    i.project && esc(i.project), s.n && `<b class="live">●${s.n}</b> ${names.join(', ')}`, claimTag(i, card), holdTags(i),
     (i.waits || []).length && `<span class="tag blocked">⏳ Ждёт ${esc(i.waits.join(', '))}</span>`].filter(Boolean).join(' · ');
   const summary = `<section class="t-sum"><div class="t-sumbody">${i.goal ? `<div class="goal mdx">${md(i.goal, false, i)}</div>` : ''}${i.desc ? `<div class="desc mdx">${md(i.desc, false, i)}</div>` : ''}
       ${i.next ? `<div class="t-next"><span class="lbl">Дальше</span> ${md(i.next, true, i)}</div>` : ''}
@@ -437,7 +450,7 @@ function itemRow(i, child, kids, last) {
       ${nWait(i) ? `<span class="tag wait" title="Вопросы ждут вашего ответа">Ждут вас: ${nWait(i)}</span>` : ''}
       ${nReq(i) ? `<span class="tag req" title="Ваши просьбы, ещё не сделанные">Просьбы: ${nReq(i)}</span>` : ''}
       ${(i.waits || []).length ? `<span class="tag blocked" title="Заблокирована незавершёнными задачами">⏳ Ждёт ${esc(i.waits.join(', '))}</span>` : ''}
-      ${claimTag(i)}
+      ${claimTag(i)} ${holdTags(i)}
       ${i.status ? `<span class="tag ${esc(i.status)}">${esc(label(i.status))}</span>` : ''}
       ${i.stale ? '<span class="tag stale" title="Файлы новее handoff">Устарел</span>' : ''}
       ${remainTag(i)}${pct}
@@ -655,6 +668,8 @@ function renderSessions() {
       <span class="tag ${s.status === 'busy' ? 'active' : ''}">${esc(label(s.status))}</span>
       <span class="id grow">${esc(s.cwd)}</span>
       <span class="sess">${s.task ? 'задача ' + esc(s.task) : 'без задачи'}</span>
+      ${holds().filter((h) => h.sid === s.sid).map((h) => `<span class="tag hold" title="${esc(holdTip(h))}">Держит: ${esc(h.res)}</span><button class="ibtn" data-act="free" data-res="${esc(h.res)}" title="Снять захват «${esc(h.res)}»">×</button>`).join('')}
+      ${holds().filter((h) => (h.queue || []).some((q) => q.sid === s.sid)).map((h) => `<span class="tag wait" title="Занято: ${esc(holdTip(h))}">Ждёт: ${esc(h.res)}</span>`).join('')}
       <span class="sess">Последнее ${agoSpan(s.last)}</span>
       ${kw && s.alive ? (src('keepwarm').all_off ? '<span class="sess" title="Выключен рубильником model в настройках">Keepwarm выкл.</span>'
         : `<label class="sess"><input type="checkbox" data-act="keepwarm" data-sid="${esc(s.sid)}" ${off.has(s.sid) ? '' : 'checked'}> Keepwarm</label>
@@ -662,6 +677,19 @@ function renderSessions() {
           <button class="ibtn" data-act="kwset" data-sid="${esc(s.sid)}" title="Настройки keepwarm этой сессии" aria-expanded="${kwOpen.has(s.sid)}">⚙</button>`) : ''}
     </div>`,
   }, ...(kw && s.alive && kwOpen.has(s.sid) ? [{ key: 'kws:' + s.sid, cls: 'row kwrow', html: kwSessionForm(s) }] : [])]).flat()];   // форма — своей строкой: смена статуса сессии не стирает ввод
+}
+
+// «Занято»: захваты ресурсов списком от ресурса — свободна ли ИБ, кто держит, кто ждёт; повисший снимается
+function renderBusy() {
+  const hs = holds().sort((a, b) => a.res.localeCompare(b.res, 'ru'));
+  if (!hs.length) return [{ key: 'busy-none', cls: 'empty', html: 'Все ресурсы свободны' }];
+  return [{
+    key: 'busy', cls: 'row busy', html: `<table class="busy"><tr><th>Ресурс</th><th>Кто держит</th><th>Зачем</th><th>Сколько</th><th>Очередь</th><th></th></tr>
+      ${hs.map((h) => `<tr><td><b>${esc(h.res)}</b></td><td>${esc(sessName(h.sid))}${h.task ? ` · <span class="id">${esc(h.task)}</span>` : ''}</td>
+        <td>${esc(h.why || '—')}</td><td>с ${hhmm(h.since)}${h.until ? ', до ' + hhmm(h.until) : ''}</td>
+        <td>${(h.queue || []).map((q) => esc(sessName(q.sid))).join(', ') || '—'}</td>
+        <td><button class="btn sm" data-act="free" data-res="${esc(h.res)}" title="Снять захват: держатель узнает при следующем hold или held">Снять</button></td></tr>`).join('')}</table>`,
+  }];
 }
 
 // --- доска объявлений сессий (навык session-board): смотреть и писать от лица владельца ---
@@ -780,8 +808,9 @@ function views() {
   }
   const opened = cards.map((ref) => ({ id: 'card:' + ref, title: tabName(ref), card: ref, render: () => renderCard(ref) }));
   const board = 'board' in state.sources ? [{ id: 'board', title: 'Доска', render: renderBoard }] : [];
+  const busy = holds().length ? [{ id: 'busy', title: 'Занято', render: renderBusy }] : [];   // появляется с первым захватом
   const inbox = pending().length ? [{ id: 'inbox', title: 'Ждут вас', render: renderInbox }] : [];
-  return [...inbox, ...tabs, { id: 'kanban', title: 'Канбан', render: renderKanban }, { id: 'sessions', title: 'Сессии', render: renderSessions }, ...board, ...opened];
+  return [...inbox, ...tabs, { id: 'kanban', title: 'Канбан', render: renderKanban }, { id: 'sessions', title: 'Сессии', render: renderSessions }, ...busy, ...board, ...opened];
 }
 
 function renderLimits() {
@@ -947,6 +976,8 @@ document.addEventListener('click', async (e) => {
     await post(t.dataset.source, 'refresh', {}); toast('Обновляю…');
   } else if (a === 'release') {
     await post('claims', 'release', { task: t.dataset.task });
+  } else if (a === 'free') {
+    await post('claims', 'free', { res: t.dataset.res });
   } else if (a === 'select') {
     sel[view] = t.dataset.tab + '|' + t.dataset.id; store.set('sel', sel);
     if (narrow) openCard(sel[view]); else render();   // на узком предпросмотра нет — сразу карточка

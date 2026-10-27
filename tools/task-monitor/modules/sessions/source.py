@@ -89,7 +89,7 @@ def collect(cfg, src, ctx):
         r = read_json(path)
         if not r or 'sessionId' not in r:
             continue
-        live = alive(int(r['pid']))
+        live = alive(int(r['pid']), r.get('procStart'))
         t = transcript(troot, r['sessionId'])
         last = int(os.path.getmtime(t) * 1000) if t else r.get('updatedAt', 0)
         if not live and now - last > DAY_MS:

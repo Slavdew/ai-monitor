@@ -48,6 +48,10 @@ body.narrow .head .grow { display:none }
 /* связь с сервером пропала: данные на экране не обновляются */
 #offline { background:var(--warn); color:var(--bg); font-size:13px; padding:3px 16px; position:sticky; top:0; z-index:3 }
 .preview { background:var(--card); border:1px solid var(--acc); border-radius:8px; padding:12px }
+/* захваты ресурсов: чипы у задачи и в «Сессиях», таблица «Занято» */
+.tag.hold { border-color:var(--acc); color:var(--acc) }
+table.busy { width:100%; border-collapse:collapse; font-size:13px } table.busy th { text-align:left; color:var(--mute); font-weight:500 }
+table.busy th, table.busy td { padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top } .row.busy { overflow-x:auto }
 .preview.empty { border-color:var(--line); color:var(--mute); padding:12px }
 .pvhead .subtab { display:inline-block; cursor:default; color:var(--fg); font-weight:600 } .pv-empty { padding:4px 10px }
 .dhead { display:flex; gap:10px; align-items:baseline; margin-bottom:8px } .dhead .title { font-size:15px }

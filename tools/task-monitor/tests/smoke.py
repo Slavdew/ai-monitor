@@ -20,9 +20,9 @@ env['TASK_MONITOR_SETTINGS'] = settings
 fails = []
 
 
-def tm(*args, stdin=None):
+def tm(*args, stdin=None, sid=None):
     r = subprocess.run([sys.executable, os.path.join(TM, 'task.py'), *args], input=stdin, capture_output=True,
-                       text=True, encoding='utf-8', env=env)
+                       text=True, encoding='utf-8', env={**env, 'TASK_SESSION': sid} if sid else env)
     return r.returncode, r.stdout.strip()
 
 
@@ -44,6 +44,24 @@ code, out = tm('batch', 'a1', stdin='+ шесть\n99 status=done\n')
 check('batch атомарен', code == 1 and len(json.load(open(os.path.join(d, 'task.json'), encoding='utf-8'))['plan']) == 5, out)
 check('set неверный статус → ошибка', tm('set', 'a1', '2', 'status=xx')[0] == 1)
 check('show', '2 todo' in tm('show', 'a1')[1] or 'два' in tm('show', 'a1')[1])
+
+# захваты ресурсов: отказ с очередью, продление, снятие, сброс после перезагрузки
+check('hold', tm('hold', 'ИБ dev', 'обновление', '--ttl', '20m', sid='A')[1].startswith('ok держу: ИБ dev до '))
+code, out = tm('hold', 'ИБ dev', 'проверка', sid='B')
+check('hold занято → очередь', code == 1 and '«обновление»' in out and 'очереди 1-й' in out, out)
+check('held: держит и ждут', 'ИБ dev: A' in tm('held')[1] and 'ждут: B' in tm('held')[1], tm('held')[1])
+check('hold --ttl с ошибкой', tm('hold', 'x', '--ttl', '5q', sid='A')[0] == 1)
+check('free', tm('free', sid='A')[1] == 'ok отпущено: ИБ dev')
+check('hold после free', tm('hold', 'ИБ dev', 'проверка', sid='B')[0] == 0)
+rp = os.path.join(tmp, 'state', 'claims', 'res', 'ИБ_dev.json')
+c = json.load(open(rp, encoding='utf-8')); c['at'] = 1000   # записан до загрузки Windows, сессия вне реестра
+json.dump(c, open(rp, 'w', encoding='utf-8'))
+check('захват до загрузки снят', tm('held')[1] == 'ресурсы свободны', tm('held')[1])
+tm('hold', 'ИБ dev', 'проверка', sid='B')
+c = json.load(open(rp, encoding='utf-8')); c['reg'] = True   # сессия была в реестре и закрылась — записи нет
+json.dump(c, open(rp, 'w', encoding='utf-8'))
+check('захват закрытой сессии снят', tm('held')[1] == 'ресурсы свободны', tm('held')[1])
+tm('hold', 'стенд', 'тесты', sid='B')
 
 srv = subprocess.Popen([sys.executable, os.path.join(TM, 'server.py')], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 try:
@@ -76,6 +94,13 @@ try:
         check('без Origin → 403', False)
     except urllib.error.HTTPError as e:
         check('без Origin → 403', e.code == 403, e.code)
+    check('state.json: захват ресурса', 'стенд' in json.load(op.open(base + '/state.json'))['sources']['claims'].get('res', {}))
+    try:
+        op.open(urllib.request.Request(f'{base}/api/claims/free', json.dumps({'res': 'стенд'}).encode()))
+        check('free без Origin → 403', False)
+    except urllib.error.HTTPError as e:
+        check('free без Origin → 403', e.code == 403, e.code)
+    check('владелец снимает захват', post('claims', 'free', {'res': 'стенд'}).get('ok') is True)
 finally:
     srv.terminate()
 

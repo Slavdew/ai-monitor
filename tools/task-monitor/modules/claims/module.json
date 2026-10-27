@@ -1,3 +1,3 @@
-{ "name": "claims", "api": 1, "version": "1.0", "title": "Захваты задач сессиями (next / release / take)",
+{ "name": "claims", "api": 1, "version": "1.0", "title": "Захваты сессий: задачи (next / take / release) и ресурсы (hold / free / held)",
   "settings": { "tabs": [], "ttl_sec": 1800,
     "_comment": "tabs — вкладки для task.py next, пусто — все, кроме ideas; ttl_sec — жизнь захвата сессии вне реестра ~/.claude/sessions (продлевается каждым вызовом task.py)" } }

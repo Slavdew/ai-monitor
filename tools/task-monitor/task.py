@@ -11,6 +11,7 @@
   ack T N… [done]                       ответ учтён (done — заодно закрыть вопрос)
   unseen [--mine]                       неподтверждённые ответы с готовыми командами
   next [--tab T] [--project P] | take T | release [T]  взять первую свободную / эту / отпустить
+  hold <ресурс> "зачем" [--ttl 20m] | free [ресурс] | held     захват ИБ, стенда, ветки (help hold)
   api [источник действие ключ=…] | stats [--days 7] | hook | watch [--task T] | modules
 
 Ответ: ok / ok пункт N; ошибка — одна строка «ошибка: …», код 1. Сессия — TASK_SESSION, --sid или
@@ -18,6 +19,7 @@ CLAUDE_CODE_SESSION_ID. Подробно: task.py help batch | set | links | que
 """
 import argparse
 import collections
+import glob
 import io
 import json
 import os
@@ -29,7 +31,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from monitor.core import in_tab_root, load_config, log_call, model_on, module_hooks, module_on, module_settings, modules, read_json, require, session_id, sources  # noqa: E402
+from monitor.core import expand, in_tab_root, load_config, log_call, model_on, module_hooks, module_on, module_settings, modules, read_json, require, session_id, sources  # noqa: E402
 from monitor import questions  # noqa: E402
 from monitor.sources import tabs  # noqa: E402
 
@@ -85,6 +87,17 @@ TOPICS = {
 Значения — строки; JSON только явный: null true false […] {…}. dir и пути — всегда строки.
 Что видно в окне — node <панель>/ui.mjs card:<id> text:<css> count:<css> shot:<имя> (безголовый Edge,
 строка на шаг; node ui.mjs — список шагов). Щелчки настоящие: «Отправить» отправит.""",
+    'hold': """Захват общего ресурса (ИБ 1С, стенд, ветка): пока держите — другие сессии получают отказ
+
+  hold <ресурс> "зачем" [--ttl 20m] [--task T] [--force]   → ok держу: … | занято: <кто>, «зачем», до … — вы в очереди N-й
+      ресурс — короткое имя, одно на всех: «ИБ dev», «стенд test-1», «ветка feature/123»
+      --ttl — срок (30s, 20m, 2h); без него — пока жива сессия. Повторный hold своего — продление
+      отказ ставит в очередь; повторите hold позже — место в очереди сохраняется
+  free [ресурс]                     отпустить (без имени — все свои и место в очередях)
+  held                              кто что держит и кто ждёт, строка на ресурс
+
+Сброс сам: закрыли сессию или перезагрузили Windows — захват снят (процесс сверяется по времени создания).
+Владелец видит захваты чипом у задачи, строкой в «Сессиях» и вкладкой «Занято»; повисший снимает кнопкой.""",
 }
 AGENT_EXTRA = """
 ## Агент без хуков
@@ -161,6 +174,10 @@ def parser():
     nx = sp('next'); nx.add_argument('--tab'); nx.add_argument('--project'); nx.add_argument('--force', action='store_true')
     rl = sp('release'); rl.add_argument('ref', nargs='?')
     tk = sp('take'); tk.add_argument('ref'); tk.add_argument('--force', action='store_true')
+    hd = sp('hold'); hd.add_argument('res'); hd.add_argument('why', nargs='?', default=''); hd.add_argument('--ttl')
+    hd.add_argument('--task'); hd.add_argument('--force', action='store_true')
+    fr = sp('free'); fr.add_argument('res', nargs='?')
+    sp('held')
     # прежние формы — синонимы set (ими пользуются живые сессии)
     pl = sp('plan'); pl.add_argument('ref'); pl.add_argument('n'); pl.add_argument('status')
     nt = sp('note'); nt.add_argument('ref'); nt.add_argument('n'); nt.add_argument('text')
@@ -168,6 +185,52 @@ def parser():
     af = sp('after'); af.add_argument('ref'); af.add_argument('n'); af.add_argument('after', nargs='*')
     ln = sp('link'); ln.add_argument('ref'); ln.add_argument('pairs', nargs='+')
     return p
+
+
+def ttl_sec(text):
+    """20m, 2h, 90s, 45 (минуты) → секунды."""
+    m = re.fullmatch(r'(\d+(?:[.,]\d+)?)\s*([smhсмч]?)', (text or '').strip().lower())
+    if not m:
+        raise ValueError(f'срок «{text}»: нужно 30s, 20m или 2h')
+    k = {'s': 1, 'с': 1, 'h': 3600, 'ч': 3600}.get(m.group(2), 60)
+    return int(float(m.group(1).replace(',', '.')) * k)
+
+
+def res_cmd(cfg, a):
+    """hold / free / held — захваты ресурсов (modules/claims)."""
+    claims = require(cfg, 'claims')
+    reg = expand(module_settings(cfg, 'sessions').get('registry', '~/.claude/sessions'))
+    names = {r['sessionId']: r.get('name') or r['sessionId'][:8]
+             for r in (read_json(x) or {} for x in glob.glob(os.path.join(reg, '*.json'))) if r.get('sessionId')}
+    who = lambda sid: names.get(sid, sid[:8])
+    hhmm = lambda ms: time.strftime('%H:%M', time.localtime(ms / 1000))
+    if a.cmd == 'held':
+        hs = claims.holds(cfg)
+        for r, c in sorted(hs.items()):
+            print(f'{r}: {who(c["sid"])}{" (" + c["task"] + ")" if c.get("task") else ""}'
+                  f'{", «" + c["why"] + "»" if c.get("why") else ""}, с {hhmm(c["since"])}'
+                  f'{", до " + hhmm(c["until"]) if c.get("until") else ""}'
+                  f'{"; ждут: " + ", ".join(who(x["sid"]) for x in c["queue"]) if c["queue"] else ""}')
+        if not hs:
+            print('ресурсы свободны')
+        return
+    sid = session_id()
+    if not sid:
+        raise ValueError('нужна сессия: TASK_SESSION=<id>, --sid <id> или CLAUDE_CODE_SESSION_ID')
+    if a.cmd == 'free':
+        gone = claims.free(cfg, a.res, sid)
+        print(f'ok отпущено: {", ".join(gone)}' if gone else 'нечего отпускать')
+        return
+    task = tabs.read_item(resolve(cfg, a.task), {'id': ''}, cfg)['id'] if a.task else None
+    ok, c = claims.hold(cfg, a.res, sid, a.why, ttl_sec(a.ttl) if a.ttl else None, task, a.force)
+    if ok:
+        print(f'ok держу: {a.res}{" до " + hhmm(c["until"]) if c.get("until") else " (пока жива сессия)"}')
+        return
+    q = [x['sid'] for x in c.get('queue', [])]
+    place = q.index(sid) + 1 if sid in q else 1
+    raise ValueError(f'занято: {who(c["sid"])}{" (" + c["task"] + ")" if c.get("task") else ""}'
+                     f'{", «" + c["why"] + "»" if c.get("why") else ""}'
+                     f'{", до " + hhmm(c["until"]) if c.get("until") else ""} — вы в очереди {place}-й (--force — забрать)')
 
 
 def main():
@@ -181,7 +244,7 @@ def main():
         print(help_text(None))
         return
     if '-h' in argv or '--help' in argv:   # task.py batch -h — тема команды
-        argv = ['help', argv[0] if argv[0] in TOPICS else ('questions' if argv[0] in ('ask', 'req', 'ack', 'unseen') else '')]
+        argv = ['help', argv[0] if argv[0] in TOPICS else ('questions' if argv[0] in ('ask', 'req', 'ack', 'unseen') else 'hold' if argv[0] in ('free', 'held') else '')]
     cfg = load_config()
     cfg['_no_paths'] = True   # пути-ссылки нужны только странице
     a = parser().parse_args(argv)
@@ -543,6 +606,8 @@ def run(cfg, a):
         if not in_tab_root(cfg, d):   # задача есть, но панель и команды по id её не увидят
             roots = '; '.join(x['root'] for x in cfg.get('tabs', []))
             print(f'предупреждение: {d} вне корней вкладок — в панели её не будет; заводить внутри: {roots}')
+    elif a.cmd in ('hold', 'free', 'held'):
+        res_cmd(cfg, a)
     elif a.cmd in ('next', 'release', 'take'):
         sid = session_id()
         if not sid:
