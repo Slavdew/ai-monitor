@@ -4,6 +4,7 @@
 растёт rev, и страница по SSE (/events) забирает /state.json. Источник с every_sec обновляется в
 своём потоке, цикл берёт последний результат. Запись со страницы — POST /api/<источник>/<действие>.
 """
+import gzip
 import hashlib
 import json
 import mimetypes
@@ -55,6 +56,7 @@ class Hub:
         self.digest = ''
         self.changed = threading.Condition()
         self.kick = threading.Event()
+        self.gz = (None, b'')   # (тело, сжатое) — gzip state.json на текущую ревизию
         self.fails, self.last_err = {}, {}   # модуль -> (ошибок подряд, пауза до); последняя ошибка
 
     def _slow(self, name, src, mod):
@@ -179,7 +181,17 @@ class Handler(BaseHTTPRequestHandler):
             with open(p, 'rb') as f:
                 return self._send(200, f.read(), ctype, sandbox=True)
         if path == '/state.json':
-            return self._send(200, hub.body)
+            if 'gzip' not in (self.headers.get('Accept-Encoding') or ''):
+                return self._send(200, hub.body)
+            body = hub.body
+            if hub.gz[0] is not body:   # сжать один раз на ревизию: 11 МБ на 400 задачах → ~1 МБ (аудит 27.10)
+                hub.gz = (body, gzip.compress(body, 5))
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Encoding', 'gzip')
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            return self.wfile.write(hub.gz[1])
         if path == '/events':
             return self._events()
         name = 'index.html' if path == '/' else os.path.basename(path)

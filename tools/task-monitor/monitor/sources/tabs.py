@@ -6,6 +6,7 @@
 import os
 import re
 import shlex
+import time
 
 from monitor.core import CORE_API, front_matter, locked, read_json, read_json_strict, text_paths, write_json
 
@@ -100,9 +101,11 @@ def read_item(dir_, tab, cfg):
     done = sum(p.get('weight', 1) for p in work if p.get('status') == 'done')
     # три вопроса с одного взгляда: что важнее (priority), сколько осталось (из плана), на каком этапе
     # (stage или раздел пункта в работе: «раздел 3/9»)
-    remain = sum(1 for p in plan if p.get('status', 'todo') in ('todo', 'doing') and not p.get('q'))         + sum(1 for p in plan if p.get('status') == 'wait')
+    remain = (sum(1 for p in plan if p.get('status', 'todo') in ('todo', 'doing') and not p.get('q'))
+        + sum(1 for p in plan if p.get('status') == 'wait'))
     secs = list(dict.fromkeys(p.get('section') for p in work if p.get('section')))
-    cur = next((p for p in work if p.get('status') == 'doing'), None)         or next((p for p in work if p.get('state') == 'ready'), None)
+    cur = (next((p for p in work if p.get('status') == 'doing'), None)
+        or next((p for p in work if p.get('state') == 'ready'), None))
     stage = task.get('stage') or (cur or {}).get('section') or ''
     tpath = os.path.join(dir_, it['task_file'])
     item = {
@@ -145,6 +148,29 @@ def read_item(dir_, tab, cfg):
     return item
 
 
+_items, ITEM_TTL = {}, 60   # каталог -> (подпись файлов, когда собран, элемент)
+
+
+def cached_item(dir_, tab, cfg):
+    """Элемент из кэша, пока task.json, HANDOFF.md и README.md не менялись, но не старше ITEM_TTL с
+    (там же «новее handoff» и пути-ссылки на файлы, которые меняются сами). Тик сервера — раз в 2 с,
+    перечитывать сотни задач каждый тик — 30 % ядра (аудит 27.10)."""
+    it = cfg['item']
+    sig = []
+    for name in (it['task_file'], it['handoff_file'], 'README.md'):
+        try:
+            sig.append(os.stat(os.path.join(dir_, name)).st_mtime_ns)
+        except OSError:
+            sig.append(0)
+    sig.append(tab['id'])
+    hit, now = _items.get(dir_), time.time()
+    if hit and hit[0] == sig and now - hit[1] < ITEM_TTL and not cfg.get('_no_cache'):
+        return dict(hit[2])   # копия: collect дописывает parent и waits
+    item = read_item(dir_, tab, cfg)
+    _items[dir_] = (sig, now, item)
+    return dict(item)
+
+
 def scan_tab(tab, cfg):
     it = cfg['item']
     items, root = [], tab['root']
@@ -161,7 +187,7 @@ def scan_tab(tab, cfg):
             dirs[:] = []
         if depth and any(m in files for m in it['markers']):
             try:
-                items.append(read_item(dir_, tab, cfg))
+                items.append(cached_item(dir_, tab, cfg))
             except Exception as e:   # одна испорченная задача не прячет остальные
                 items.append({'id': os.path.basename(dir_), 'tab': tab['id'], 'dir': dir_, 'title': os.path.basename(dir_),
                               'error': f'{type(e).__name__}: {e}', 'plan': [], 'links': {}, 'docs': [], 'status': '',
