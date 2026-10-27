@@ -150,7 +150,7 @@ function holdTags(i) {
 
 const cardBtn = (i) => `<button class="ibtn go" data-act="card" data-ref="${esc(i.tab + '|' + i.id)}" title="Открыть карточку задачи" aria-label="Открыть карточку задачи"><svg viewBox="0 0 16 16" width="13" height="13" style="display:block;margin:auto" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6.6" cy="6.6" r="4.2"/><path d="m9.8 9.8 3.8 3.8"/></svg></button>`;
 
-// --- вопросы владельцу: пункт плана q; ответ черновиком (сохраняется сам), «Отправить Claude» — пачкой по задаче ---
+// --- вопросы владельцу: пункт плана q; ответ черновиком (сохраняется сам), «Зафиксировать ответы» — пачкой по задаче ---
 
 const drafts = {};      // «каталог|индекс» -> текст, ещё не сохранённый сервером
 const draftTimers = {};
@@ -162,7 +162,7 @@ const fmtTime = (ms) => new Date(ms).toLocaleString('ru-RU', { day: '2-digit', m
 function qaHtml(i, p, k, edit) {
   const key = i.dir + '|' + k;
   const answers = (p.answers || []).map((a) => `<div class="ans">${linkPaths(esc(a.text), i.paths)} <span class="sess">· ${fmtTime(a.at)}</span></div>`).join('');
-  const status = p.seen === false ? '<span class="sess unread">✓ Отправлено, ждёт агента</span>'
+  const status = p.seen === false ? '<span class="sess unread">✓ Зафиксировано, ждёт агента</span>'
     : p.seen && (p.answers || []).length ? '<span class="sess ok">✓✓ Принято агентом</span>' : '';
   const asked = p.rephrase ? `<div class="ans">Просьба перефразировать${p.rephrase.text !== 'проще' ? ': ' + esc(p.rephrase.text) : ''} <span class="sess">· ${fmtTime(p.rephrase.at)}</span></div>` : '';
   const was = p.was ? `<div class="sess was">Было: <s>${esc(p.was)}</s></div>` : '';
@@ -221,8 +221,26 @@ function planRow(i, p, k, full, answer = full) {
   return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length;
-const submitInner = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Отправить Claude (${nDraftOf(i)})</button>
-      <span class="sess">Черновики видны только вам, пока не отправлены</span></p>` : '');
+// ответ доходит до агента только с репликой в его сессии (хук на вводе) — подсказка, куда написать (аудит 27.10, ★)
+const PING_PHRASE = 'Ответил в панели — посмотри';
+function sessionOf(i) {
+  const ss = src('sessions').list || [];
+  const c = (src('claims').list || {})[i.id];
+  return ss.find((s) => s.alive && c && s.sid === c.sid) || ss.find((s) => s.alive && s.task === i.id)
+    || ss.find((s) => s.alive && i.session && s.sid === i.session) || null;
+}
+const nToAgent = (i) => (i.plan || []).filter((p) => p.q && p.status === 'wait' && (p.answers || []).length && p.seen === false).length;
+function agentHint(i) {
+  const n = nToAgent(i);
+  if (!n) return '';
+  const s = sessionOf(i);
+  const where = s ? `Напишите в сессию <b class="who">${esc(s.title || s.sid.slice(0, 8))}</b>${s.address ? ` <code class="id">@${esc(s.address)}</code>` : ''} любое сообщение — ответы придут с ним.`
+    : 'Живой сессии у задачи нет — начните новую командой продолжения.';
+  const copy = s ? copyBtn(PING_PHRASE, `«${PING_PHRASE}»`) : (i.resume ? copyBtn(i.resume, 'Команда продолжения') : '');
+  return `<div class="agenthint"><span class="sess">Зафиксировано ${n}, агент ещё не видел.</span> ${where} ${copy}</div>`;
+}
+const submitInner = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Зафиксировать ответы (${nDraftOf(i)})</button>
+      <span class="sess">Черновики видны только вам, пока не зафиксированы</span></p>` : '') + agentHint(i);
 // контейнер есть всегда: пока фокус в поле ответа, render отложен — кнопку обновляет refreshSubmit на месте
 const submitHtml = (i) => `<div class="qsubmit" data-dir="${esc(i.dir)}">${submitInner(i)}</div>`;
 function refreshSubmit(dir) {
@@ -888,7 +906,7 @@ function renderInbox() {
   rows.push(sec('ib:qs', 'Вопросы', asked.reduce((s, i) => s + nWait(i), 0)));
   const qOpen = !fold.has('ib:qs');
   const drafted = asked.filter(nDraftOf);
-  if (qOpen && drafted.length > 1) rows.push({ key: 'in-all', cls: 'morep', html: `<button class="btn primary" data-act="submitall">Отправить все (${drafted.reduce((s, i) => s + nDraftOf(i), 0)})</button> <span class="sess">Ответы ${drafted.length} задач одной кнопкой</span>` });
+  if (qOpen && drafted.length > 1) rows.push({ key: 'in-all', cls: 'morep', html: `<button class="btn primary" data-act="submitall">Зафиксировать все (${drafted.reduce((s, i) => s + nDraftOf(i), 0)})</button> <span class="sess">Ответы ${drafted.length} задач одной кнопкой</span>` });
   if (qOpen && !asked.length) rows.push({ key: 'in-none', cls: 'empty', html: 'Вопросов нет' });
   for (const i of qOpen ? asked : []) {
     const fk = 'in:' + i.tab + '|' + i.id, open = !fold.has(fk);
@@ -1044,7 +1062,7 @@ document.addEventListener('click', async (e) => {
     for (const el of document.querySelectorAll('[data-act="draft"]')) if (draftTimers[el.dataset.key]) await saveDraft(el);
     const r = await post('tabs', 'submit', { dir: t.dataset.dir });
     for (const k of Object.keys(drafts)) if (k.startsWith(t.dataset.dir + '|')) delete drafts[k];
-    if (r.ok) toast(`отправлено: ${r.sent}`);
+    if (r.ok) toast(`Зафиксировано: ${r.sent}`);
   } else if (a === 'qopt') {
     // вариант ответа: повторный щелчок снимает; старую галочку «проще» заменяет вариант
     const v = t.getAttribute('aria-checked') === 'true' ? '' : t.dataset.v;
@@ -1053,7 +1071,7 @@ document.addEventListener('click', async (e) => {
     t.closest('.qopts')?.querySelectorAll('.qopt').forEach((b) => { const on = b === t && !!v; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
     const ta = document.querySelector(`textarea[data-key="${CSS.escape(t.dataset.key)}"]`);
     t.closest('li.q')?.classList.toggle('drafted', !!v || !!ta?.value.trim());
-    refreshSubmit(t.dataset.dir);   // кнопка «Отправить Claude» — сразу, не дожидаясь ухода из поля
+    refreshSubmit(t.dataset.dir);   // кнопка «Зафиксировать ответы» — сразу, не дожидаясь ухода из поля
     await post('tabs', 'draft', { dir: t.dataset.dir, index: +t.dataset.index, opt: v, rephrase: null });
     render();
     ta?.focus();

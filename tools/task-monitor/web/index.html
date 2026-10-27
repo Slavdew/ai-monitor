@@ -250,7 +250,10 @@ th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
 /* вопросы владельцу */
 .tag.wait { color:var(--warn); border-color:var(--warn) }
 /* ожидаемое действие: команда — отдельной строкой для копирования, кнопки — рядом */
-.actcmd { display:block; margin:4px 0 } .tag.req { color:var(--acc); border-color:var(--acc) }
+.actcmd { display:block; margin:4px 0 }
+/* после «Зафиксировать»: куда написать, чтобы агент увидел ответы */
+.agenthint { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; margin:8px 0 2px; padding:8px 10px; border-radius:8px; background:var(--soft); font-size:13px }
+.agenthint .who { color:var(--fg) } .tag.req { color:var(--acc); border-color:var(--acc) }
 .wbadge { display:inline-block; min-width:16px; padding:0 4px; border-radius:8px; background:var(--warn); color:var(--bg); font-size:11px; text-align:center }
 /* вопрос: поле ответа в строку, «↺ проще» справа от него */
 /* вопрос — отдельной плашкой; набранный, но не отправленный ответ — зелёный фон и метка «К отправке» */
