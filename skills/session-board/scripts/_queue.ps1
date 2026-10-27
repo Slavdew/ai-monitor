@@ -16,6 +16,24 @@
 # строке подключения — несколько баз не мешают друг другу.
 $QueueDir = Join-Path $env:LOCALAPPDATA "1c-ib-queue"
 
+# Дописать строку в общий файл очереди. Add-Content при одновременной записи нескольких сессий
+# падает на занятом файле (зонд 26.10: 195–197 ошибок из 200 у каждого из трёх процессов) —
+# пишущие встают в очередь на именованном мьютексе файла. Мьютекс брошенного процесса ОС
+# отдаёт следующему (AbandonedMutexException — запись всё равно наша).
+function Add-IbLine([string]$Path, [string]$Line) {
+  $name = 'Local\1c-ib-queue-' + ((Split-Path $Path -Leaf) -replace '[^\w.-]', '_')
+  $mutex = New-Object System.Threading.Mutex($false, $name)
+  $own = $false
+  try {
+    try { $own = $mutex.WaitOne(10000) } catch [System.Threading.AbandonedMutexException] { $own = $true }
+    if (-not $own) { throw "файл очереди занят дольше 10 с: $Path" }
+    [System.IO.File]::AppendAllText($Path, $Line + "`r`n", (New-Object System.Text.UTF8Encoding $false))
+  } finally {
+    if ($own) { $mutex.ReleaseMutex() }
+    $mutex.Dispose()
+  }
+}
+
 function Get-IbQueuePath([string]$IbServer, [string]$Extension) {
   New-Item -ItemType Directory -Path $QueueDir -Force | Out-Null
   Join-Path $QueueDir (($IbServer -replace '\W', '_') + $Extension)
@@ -26,8 +44,7 @@ function Get-IbQueuePath([string]$IbServer, [string]$Extension) {
 # упавшая сессия свою строку не допишет и остановила бы очередь навсегда.
 function Write-IbQueueLog([string]$IbServer, [string]$Text) {
   $path = Get-IbQueuePath $IbServer ".log"
-  Add-Content -Path $path -Encoding UTF8 `
-              -Value ("{0:yyyy-MM-dd HH:mm:ss}`t$PID`t$Text" -f (Get-Date))
+  Add-IbLine $path ("{0:yyyy-MM-dd HH:mm:ss}`t$PID`t$Text" -f (Get-Date))
 
   # Ротация в одно поколение: журнал нужен для разбора недавнего, а не как архив.
   # Обрезать по строкам дороже — файл пришлось бы читать целиком на каждой записи.
@@ -132,10 +149,10 @@ function Add-IbNote([string]$IbServer, [string]$Text, [string]$Owner, [int]$Hour
   $who  = if ($Owner) { $Owner } else { "pid $PID" }
   if ($Key) { $who = "$who #$($Key.ToLower())" }
   $line = "{0}`t{1}`t{2}`t{3}" -f $now.ToBinary(), $now.AddHours($Hours).ToBinary(), $who, ($Text -replace '\s+', ' ')
-  Add-Content -Path (Get-IbQueuePath $IbServer ".board") -Value $line -Encoding UTF8
+  Add-IbLine (Get-IbQueuePath $IbServer ".board") $line
   Update-IbBoardFormat $IbServer
   $own = Get-IbOwnPath $IbServer
-  if ($own) { Add-Content -Path $own -Value $now.ToBinary() -Encoding ASCII }
+  if ($own) { Add-IbLine $own ([string]$now.ToBinary()) }
   Write-IbQueueLog $IbServer "объявление ($who): $Text"
   Remove-IbStaleCursors $IbServer
   $now

@@ -1,6 +1,7 @@
 """Подключить панель задач и доску объявлений к Claude Code на этой машине (повторный запуск безопасен).
 
   py install.py [--board home] [--bin <папка>] [--name tm] [--clean <settings.json проекта> ...]
+  py install.py --check [<проект> ...]   только отчёт о копиях навыков (дубли, устаревшие)
 
 - копирует навыки task-monitor, session-board и handoff в ~/.claude/skills;
 - в ~/.claude/settings.json: хуки UserPromptSubmit (ответы владельца из панели, объявления доски),
@@ -69,6 +70,44 @@ def wrapper(bin_dir, name):
     return True
 
 
+def tree_hash(d):
+    """Хеш содержимого каталога навыка (пути и байты, без __pycache__) — сравнить копию с репозиторием."""
+    import hashlib
+    h = hashlib.sha1()
+    for root, dirs, files in os.walk(d):
+        dirs[:] = sorted(x for x in dirs if x != '__pycache__')
+        for f in sorted(files):
+            p = os.path.join(root, f)
+            h.update(os.path.relpath(p, d).replace(os.sep, '/').encode())
+            with open(p, 'rb') as fh:
+                h.update(fh.read())
+    return h.hexdigest()[:10]
+
+
+def check(projects):
+    """Где лежат копии навыков: личная (~/.claude/skills) перекрывает проектную (<проект>/.claude/skills) —
+    две копии значат, что работает личная; копия, отличная от репозитория, — устарела или правлена на месте."""
+    bad = 0
+    for name in SKILLS:
+        ref = tree_hash(os.path.join(REPO, 'skills', name))
+        places = [('личная', os.path.join(CLAUDE, 'skills', name))] + \
+                 [(f'проект {p}', os.path.join(p, '.claude', 'skills', name)) for p in projects]
+        found = [(k, p) for k, p in places if os.path.isdir(p)]
+        for k, p in found:
+            same = os.path.realpath(p) == os.path.realpath(os.path.join(REPO, 'skills', name)) or tree_hash(p) == ref
+            bad += not same
+            print(f'{name}: {k} — {"как в репозитории" if same else "ОТЛИЧАЕТСЯ от репозитория (устарела или правлена)"}')
+        if len(found) > 1:
+            bad += 1
+            print(f'{name}: копий {len(found)} — работает личная, проектная не видна')
+        if not found:
+            print(f'{name}: не установлен')
+    print('дублей и расхождений нет' if not bad else f'замечаний: {bad}')
+
+
+SKILLS = ('task-monitor', 'session-board', 'handoff')
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--board', default='home', help='имя доски машины (SESSION_BOARD); пусто — не задавать')
@@ -76,9 +115,12 @@ def main():
     p.add_argument('--bin', default=os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'task-monitor', 'bin'),
                    help='папка для обёртки (будет добавлена в PATH пользователя)')
     p.add_argument('--name', default='tm', help='имя обёртки; пусто — не ставить')
+    p.add_argument('--check', nargs='*', metavar='ПРОЕКТ', help='только отчёт: где копии навыков и совпадают ли с репозиторием; ничего не меняет')
     a = p.parse_args()
+    if a.check is not None:
+        return check(a.check or [os.getcwd()])
 
-    for name in ('task-monitor', 'session-board', 'handoff'):
+    for name in SKILLS:
         dst = os.path.join(CLAUDE, 'skills', name)
         shutil.copytree(os.path.join(REPO, 'skills', name), dst, dirs_exist_ok=True)
         print('навык:', dst)
