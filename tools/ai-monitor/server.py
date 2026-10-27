@@ -99,7 +99,8 @@ class Hub:
         mods = {n: {'title': r['manifest'].get('title', ''), 'version': r['manifest'].get('version', ''), 'core': r['core'],
                     'on': module_on(self.cfg, n), 'error': r['error'], 'dir': r['dir']}
                 for n, r in modules(self.cfg).items()}
-        ctx_all = {**ctx, 'core': {'modules': mods}}
+        # home — откуда запущен сервер: установщик сверяет, что на порту новая версия (28.10 старый сервер остался)
+        ctx_all = {**ctx, 'core': {'modules': mods, 'home': os.path.realpath(HOME)}}
         raw = json.dumps(ctx_all, ensure_ascii=False, sort_keys=True, default=str)
         digest = hashlib.sha1(raw.encode()).hexdigest()
         if digest != self.digest:

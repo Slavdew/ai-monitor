@@ -236,7 +236,24 @@ def restart_server():
     time.sleep(1)
     subprocess.Popen(['cmd', '/c', os.path.join(RUN, 'start.cmd'), '/silent'], cwd=RUN,
                      creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-    print('сервер: перезапущен из', CURRENT)
+    # проверка: на порту — сервер из current (сравнение по папке, которую сервер сам сообщает в state.json)
+    import gzip
+    import urllib.request
+    want, home = os.path.normcase(os.path.realpath(RUN)), ''
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    for _ in range(20):
+        time.sleep(0.5)
+        try:
+            raw = opener.open('http://127.0.0.1:8770/state.json', timeout=2).read()
+            home = json.loads(gzip.decompress(raw) if raw[:2] == b'\x1f\x8b' else raw)['sources']['core'].get('home', '')
+            break
+        except Exception:
+            continue
+    if os.path.normcase(home) == want:
+        print('сервер: работает из', CURRENT)
+    else:
+        print(f'ВНИМАНИЕ: на 8770 не новый сервер ({home or "не отвечает"}) — закройте прежний (трей → Закрыть) и '
+              f'запустите {os.path.join(RUN, "start.cmd")}')
 
 
 def first_run(a):
