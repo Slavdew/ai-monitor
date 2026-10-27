@@ -638,17 +638,15 @@ const RULES_SEED = [
 const kwRules = () => (src('keepwarm').graph || {}).rules || [];
 function kwRulesRow() {
   const rs = kwRules();
+  // порядок и удаление — в начале строки: при переносе хвоста они не уезжают вниз
   const row = (r, n) => `<div class="kwrule" data-r="${n}"><span class="id">${n + 1}</span>
+    <span class="kwmove"><button class="ibtn" data-act="kwrule" data-op="up" data-r="${n}" title="Выше: проверяется раньше"${n ? '' : ' disabled'}>↑</button><button class="ibtn" data-act="kwrule" data-op="down" data-r="${n}" title="Ниже"${n < rs.length - 1 ? '' : ' disabled'}>↓</button><button class="ibtn" data-act="kwrule" data-op="del" data-r="${n}" title="Удалить настройку">×</button></span>
     <input type="text" data-f="name" value="${esc(r.name || '')}" placeholder="Название" maxlength="40">
     <span class="kwdays">${DAYS.map(([d, t]) => `<label><input type="checkbox" data-f="day" value="${d}"${(r.days || []).includes(d) ? ' checked' : ''}>${t}</label>`).join('')}</span>
     <label>с <input type="time" data-f="from" value="${esc(r.from)}"></label><label>до <input type="time" data-f="to" value="${esc(r.to)}"></label>
     <select data-f="mode"><option value="until"${r.mode === 'until' ? ' selected' : ''}>до конца интервала</option><option value="pings"${r.mode === 'pings' ? ' selected' : ''}>по числу прогревов</option></select>
     <label${r.mode === 'pings' ? '' : ' hidden'}><input type="number" data-f="pings" min="1" max="48" value="${esc(r.pings || 6)}"> прогревов</label>
-    <span class="kwkinds" title="Для каких видов задач сессия ставит таймер сама, без просьбы">Ставить самим: ${KINDS.map(([k, t]) => `<label><input type="checkbox" data-f="kind" value="${k}"${(r.kinds || ['task']).includes(k) ? ' checked' : ''}>${t}</label>`).join('')}</span>
-    <span class="grow"></span>
-    <button class="ibtn" data-act="kwrule" data-op="up" data-r="${n}" title="Выше: проверяется раньше"${n ? '' : ' disabled'}>↑</button>
-    <button class="ibtn" data-act="kwrule" data-op="down" data-r="${n}" title="Ниже"${n < rs.length - 1 ? '' : ' disabled'}>↓</button>
-    <button class="ibtn" data-act="kwrule" data-op="del" data-r="${n}" title="Удалить настройку">×</button></div>`;
+    <span class="kwkinds" title="Для каких видов задач сессия ставит таймер сама, без просьбы">Ставить самим: ${KINDS.map(([k, t]) => `<label><input type="checkbox" data-f="kind" value="${k}"${(r.kinds || ['task']).includes(k) ? ' checked' : ''}>${t}</label>`).join('')}</span></div>`;
   return { key: 'kw-rules', cls: 'row kwg kwrules', html: `<div data-kwr>
     <p class="sess">Настройки проверяются сверху вниз по текущему дню и времени — срабатывает первая подошедшая, остальные не смотрятся.
       Не подошла ни одна — один прогрев. Интервал через полночь (23:00–02:00) относится к дню начала. «Сегодня до» важнее настроек.</p>
