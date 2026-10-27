@@ -293,6 +293,8 @@ def apply_item(cfg, plan, n, fields):
             if p.get('q') and v != p.get('text'):
                 p['was'] = p.get('text', '')   # страница покажет «было → стало»
                 p.pop('rephrase', None)
+                if p.get('answers'):   # переспросили (ответ был встречным вопросом) — снова ждёт владельца; прежнее — в историю
+                    p['prev_answers'] = p.get('prev_answers', []) + p.pop('answers')
         p[k] = v
     return p
 

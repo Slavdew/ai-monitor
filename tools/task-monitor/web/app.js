@@ -870,19 +870,23 @@ function renderInbox() {
   const rows = st ? [st.row] : [];
   // ожидаемые действия — первыми: агент стоит, пока их не сделать
   const acting = items().filter((i) => isActing(i) && inSub(i));
-  if (acting.length) rows.push({ key: 'act-h', cls: 'tabsec static', html: `<h2>Ожидаемые действия <span class="cnt">${acting.reduce((s, i) => s + nAct(i), 0)}</span></h2>` });
-  for (const i of acting) {   // как блок вопросов: варианты «Сделал» / «Не буду», свой ответ, «проще», отправка
+  // разделы «Ожидаемые действия» и «Вопросы» сворачиваются целиком, как блоки задач внутри них
+  const sec = (key, title, n) => ({ key: key + '-h', cls: 'tabsec',
+    html: `<h2 data-act="fold" data-id="${key}" tabindex="0" role="button" aria-expanded="${!fold.has(key)}">${chev(!fold.has(key))}${title} <span class="cnt">${n}</span></h2>` });
+  if (acting.length) rows.push(sec('ib:acts', 'Ожидаемые действия', acting.reduce((s, i) => s + nAct(i), 0)));
+  for (const i of fold.has('ib:acts') ? [] : acting) {   // как блок вопросов: варианты «Сделал» / «Не буду», свой ответ, «проще», отправка
     const fk = 'ina:' + i.tab + '|' + i.id, open = !fold.has(fk);
     const acts = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && p.act ? planRow(i, p, k, false, true) : '')).join('') : '';
     rows.push({ key: 'act:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
         ${nAct(i) ? `<span class="tag wait">Действия: ${nAct(i)}</span>` : ''}${cardBtn(i)}</div>${open ? `<ul class="plan">${acts}</ul>${submitHtml(i)}` : ''}` });
   }
-  if (acting.length) rows.push({ key: 'q-h', cls: 'tabsec static', html: '<h2>Вопросы</h2>' });
+  rows.push(sec('ib:qs', 'Вопросы', asked.reduce((s, i) => s + nWait(i), 0)));
+  const qOpen = !fold.has('ib:qs');
   const drafted = asked.filter(nDraftOf);
-  if (drafted.length > 1) rows.push({ key: 'in-all', cls: 'morep', html: `<button class="btn primary" data-act="submitall">Отправить все (${drafted.reduce((s, i) => s + nDraftOf(i), 0)})</button> <span class="sess">Ответы ${drafted.length} задач одной кнопкой</span>` });
-  if (!asked.length) rows.push({ key: 'in-none', cls: 'empty', html: 'Вопросов нет' });
-  for (const i of asked) {
+  if (qOpen && drafted.length > 1) rows.push({ key: 'in-all', cls: 'morep', html: `<button class="btn primary" data-act="submitall">Отправить все (${drafted.reduce((s, i) => s + nDraftOf(i), 0)})</button> <span class="sess">Ответы ${drafted.length} задач одной кнопкой</span>` });
+  if (qOpen && !asked.length) rows.push({ key: 'in-none', cls: 'empty', html: 'Вопросов нет' });
+  for (const i of qOpen ? asked : []) {
     const fk = 'in:' + i.tab + '|' + i.id, open = !fold.has(fk);
     const asks = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && !p.act ? planRow(i, p, k, false, true) : '')).join('') : '';
     const n = nWait(i), done = (i.plan || []).filter((p) => p.status === 'wait' && !p.act).length - n;

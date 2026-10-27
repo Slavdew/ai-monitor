@@ -139,7 +139,11 @@ check('hook показывает ответ', 'a1#4' in out and 'да' in out, o
 check('hook второй раз молчит', tm('hook', stdin=hook_in)[1] == '')
 out = tm('unseen')[1]
 check('unseen: ответ на действие', 'a1#6: ОЖИДАЕМОЕ ДЕЙСТВИЕ: Запустить установщик' in out and 'Сделал' in out and 'готово' in out, out)
-check('ack действия', tm('ack', 'a1', '6', 'done')[1] == 'ok')
+# ответ — встречный вопрос («где запускать?»): агент дописал описание — пункт снова ждёт владельца
+tm('set', 'a1', '6', 'text=Запустить установщик в PowerShell')
+p6 = json.load(open(os.path.join(d, 'task.json'), encoding='utf-8'))['plan'][5]
+check('переспрос: снова ждёт ответа', p6['status'] == 'wait' and not p6.get('answers') and len(p6.get('prev_answers', [])) == 1, p6)
+check('ack действия', tm('ack', 'a1', '6')[1] == 'ok')
 check('ack (синоним «принят»)', tm('принят', 'a1', '4', 'done')[1] == 'ok')
 check('unseen пуст', tm('unseen')[1] == 'новых ответов нет')
 print(f'{len(fails)} ошибок, {time.time() - t0:.1f} с')
