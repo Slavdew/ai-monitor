@@ -509,6 +509,10 @@ def show(cfg, d, all_):
 def add(cfg, a):
     d = resolve(cfg, a.ref)
     fields = _item_fields(a.pairs)
+    if a.cmd == 'act' or a.act:   # ожидаемое действие владельца — вопрос вида act: те же ответ, «проще», отправка
+        n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt or ['Сделал', 'Не буду'],
+                          {'act': True, **({'cmd': a.run} if a.run else {})})
+        return f'ok пункт {n}'
     if a.cmd == 'ask' or a.ask:
         n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt)
         rest = {k: v for k, v in fields.items() if k in ('section', 'after', 'who')}
@@ -518,10 +522,6 @@ def add(cfg, a):
     item = {'text': a.text, 'status': 'todo'}
     if a.cmd == 'req' or a.req:   # просьба владельца: req=true — блок «Ваши просьбы», пока не сделана
         item.update({'req': True, 'at': time.strftime('%Y-%m-%d')})
-    if a.cmd == 'act' or a.act:   # ожидаемое действие владельца: блок «Ждут вас», пока он не отметит «сделано»
-        item.update({'act': True, 'at': time.strftime('%Y-%m-%d')})
-        if a.run:   # команда, которую владельцу выполнить (страница даёт её скопировать)
-            item['cmd'] = a.run
     item.update({k: v for k, v in (('note', a.note), ('section', a.section)) if v})
     if 'status' in fields and fields['status'] == 'wait':
         raise ValueError('wait — только у вопроса: task.py ask T "вопрос"')

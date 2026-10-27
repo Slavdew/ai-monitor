@@ -14,7 +14,7 @@ import time
 
 from monitor.core import expand, model_on, read_json, write_json
 
-GRAPH_KEYS = ('workdayHours', 'startWindow', 'offDays', 'autoStart')
+GRAPH_KEYS = ('workdayHours', 'startWindow', 'offDays', 'autoStart', 'rulesOn', 'rules')
 
 
 def _dirs(src):
@@ -100,8 +100,21 @@ def _graph_value(k, v):
         return v
     if k == 'offDays' and isinstance(v, list) and all(isinstance(x, int) and 0 <= x <= 6 for x in v):
         return sorted(set(v))
-    if k == 'autoStart' and isinstance(v, bool):
+    if k in ('autoStart', 'rulesOn') and isinstance(v, bool):
         return v
+    if k == 'rules' and isinstance(v, list) and len(v) <= 12:   # расширенный график: правила по порядку
+        out = []
+        for r in v:
+            days, kinds = r.get('days'), r.get('kinds')
+            ok = (isinstance(r, dict) and hm(r.get('from')) and hm(r.get('to')) and r.get('mode') in ('until', 'pings')
+                  and isinstance(days, list) and all(isinstance(x, int) and 0 <= x <= 6 for x in days)
+                  and (kinds is None or isinstance(kinds, list) and all(isinstance(x, str) and len(x) <= 20 for x in kinds)))
+            if not ok:
+                raise ValueError('rules: недопустимое правило')
+            out.append({'name': str(r.get('name') or '')[:40], 'days': sorted(set(days)), 'from': r['from'], 'to': r['to'],
+                        'mode': r['mode'], 'pings': max(1, min(48, int(r.get('pings') or 6))),
+                        **({'kinds': kinds} if kinds is not None else {})})
+        return out
     raise ValueError(f'{k}: недопустимое значение')
 
 

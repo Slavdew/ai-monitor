@@ -31,7 +31,7 @@ def _words(s):
     return {w for w in re.findall(r'\w+', (s or '').lower()) if len(w) > 2}
 
 
-def ask(cfg, dir_, text, note='', force=False, opts=()):
+def ask(cfg, dir_, text, note='', force=False, opts=(), extra=None):
     """Новый вопрос в план задачи. Похожий открытый вопрос (≥ 0,6 общих слов) — отказ: дополнить его.
     opts — 2–4 коротких варианта ответа (кнопки на странице); «↺ проще» и «Как советуешь» страница добавляет сама."""
     opts = [o.strip() for o in opts if o.strip()]
@@ -50,6 +50,7 @@ def ask(cfg, dir_, text, note='', force=False, opts=()):
         item['note'] = note
     if opts:
         item['opts'] = opts
+    item.update(extra or {})   # act: ожидаемое действие владельца, cmd — команда к нему
     task = tabs.update_task(cfg, dir_, lambda t: t.setdefault('plan', []).append(item))
     return len(task['plan'])
 
@@ -111,7 +112,7 @@ def submit(cfg, args):
                 pending[f'{tid}#{k + 1}'] = {'dir': args['dir'], 'n': k + 1, 'q': p['text'],
                                             'answers': [a['text'] for a in p.get('answers', [])],
                                             'rephrase': (p.get('rephrase') or {}).get('text'), 'at': max(stamps),
-                                            **({'by': p['by']} if p.get('by') else {})}
+                                            **({'by': p['by']} if p.get('by') else {}), **({'act': True} if p.get('act') else {})}
             write_json(_pending_path(cfg), pending)
     task = tabs.update_task(cfg, args['dir'], fn)
     if not sent:
@@ -151,31 +152,6 @@ def request(cfg, args):
 
 
 
-def act_done(cfg, args):
-    """Владелец отметил ожидаемое действие (пункт act) сделанным или «не буду» — со страницы. Пункт закрывается,
-    агент видит отметку хуком и в unseen, как ответ: проверяет результат и подтверждает ack."""
-    n, skip = int(args['index']) + 1, bool(args.get('skip'))
-    note = ' '.join(str(args.get('note') or '').split())
-    at, out = now_ms(), {}
-
-    def fn(t):
-        p = tabs.item(t.get('plan', []), n)
-        if not p.get('act'):
-            raise ValueError(f'пункт {n} — не ожидаемое действие')
-        p.update({'status': 'skip' if skip else 'done', 'seen': False, 'owner_at': at})
-        if note:
-            p['owner_note'] = note
-        out['tid'] = t.get('id') or os.path.basename(args['dir'])
-        with locked(_pending_path(cfg)):
-            pending = read_json(_pending_path(cfg), {}) or {}
-            pending[f'{out["tid"]}#{n}'] = {'dir': args['dir'], 'n': n, 'q': p['text'], 'answers': [note] if note else [],
-                                            'kind': 'act', 'skip': skip, 'at': at}
-            write_json(_pending_path(cfg), pending)
-    tabs.update_task(cfg, args['dir'], fn)
-    with open(os.path.join(cfg['state_dir'], 'events.jsonl'), 'a', encoding='utf-8') as f:
-        f.write(json.dumps({'kind': 'act', 'task': out['tid'], 'items': [n], 'skip': skip, 'at': at}, ensure_ascii=False) + '\n')
-    return {'ok': True}
-
 
 def reword(cfg, dir_, n, text):
     """Агент переписал вопрос (по просьбе «перефразировать»): прежний текст — в was, просьба снята."""
@@ -207,18 +183,19 @@ def ack(cfg, dir_, nums, done=False):
 def _line(key, r):
     """Ответ строкой с готовой командой: ack a 5 done / set a 7 text="…" и ack."""
     tid, _, n = key.rpartition('#')
-    if r.get('kind') == 'act':
-        what = 'НЕ БУДЕТ ДЕЛАТЬ' if r.get('skip') else 'ВЫПОЛНИЛ'
-        return (f'{key}: ВЛАДЕЛЕЦ {what} ОЖИДАЕМОЕ ДЕЙСТВИЕ: {r["q"]}' + (f' | комментарий: {r["answers"][0]}' if r['answers'] else '')
-                + f' → проверь результат (или учти отказ), затем ack {tid} {n}')
     if r.get('kind') == 'req':
         return (f'{key}: НОВАЯ ПРОСЬБА ВЛАДЕЛЬЦА: {r["q"]} → предложи владельцу разобрать (взять в работу, '
                 f'уточнить или отложить), затем ack {tid} {n}')
-    line = f'{key}: {r["q"]}'
+    line = f'{key}: {"ОЖИДАЕМОЕ ДЕЙСТВИЕ: " if r.get("act") else ""}{r["q"]}'
     if r['answers']:
         line += f' | ответ: {" / ".join(r["answers"])}'
-    if r.get('rephrase'):
+    if r.get('rephrase') and r.get('act'):   # «проще» у действия — пояснить, что делает команда и когда её запускать
+        line += (f' | ПОЯСНИТЬ ({r["rephrase"]}): дополни описание — что делает команда, когда запускать, что будет '
+                 f'потом → set {tid} {n} text="…", затем ack {tid} {n}')
+    elif r.get('rephrase'):
         line += f' | ПЕРЕФРАЗИРОВАТЬ ({r["rephrase"]}) → set {tid} {n} text="…", затем ack {tid} {n}'
+    elif r.get('act'):
+        line += f' → проверь результат по ответу (или учти отказ и вопрос), затем ack {tid} {n} done'
     else:
         line += f' → ack {tid} {n} done'
     return line

@@ -110,7 +110,9 @@ assert.match(cli('2'), /^keepwarm: таймер кэша до .+, handoff\n$/);
 assert.match(gate([human(60), answer(55)], 'keepwarm: таймер кэша'), /последний прогрев/);
 // «сегодня работаем до 23:59» — рабочий день даже в выходной; сегодняшние таймеры по умолчанию
 // следуют за ним, вчерашний и с явными часами — нет
-if (new Date().getHours() < 23) {
+// после 00:15: «срок 10 мин назад» в первые минуты суток падает на вчерашнюю дату (упало 28.10 в 00:06)
+const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+if (nowMin >= 15 && nowMin < 23 * 60) {
   assert.strictEqual(run('--day-end', '23:59').stdout, 'keepwarm: сегодня рабочий день до 23:59\n');
   assert.match(cli(), /^keepwarm: таймер кэша до .+ 23:59 \(конец дня\), handoff\n$/);
   assert.match(gate([human(60), answer(55)], `keepwarm: таймер кэша, один прогрев на ${today}, handoff`), /поддержание до 23:59/);
@@ -163,6 +165,35 @@ assert.strictEqual(run('--prompt', 'auto').status, 2);
 assert.match(cli(), /^keepwarm: таймер кэша до /);
 fs.rmSync(local);
 assert.match(cli('auto'), /^keepwarm: таймер кэша до /);
+
+// расширенный график: правила сверху вниз, первое подошедшее; «сегодня до» не задан
+if (nowMin < 23 * 60 + 58) {
+  fs.rmSync(dayStart, { force: true });
+  const wd = new Date().getDay(), other = (wd + 1) % 7;
+  const rules = (list, on = true) => fs.writeFileSync(local, JSON.stringify({ rulesOn: on, rules: list }));
+  const all = { days: [0, 1, 2, 3, 4, 5, 6], from: '00:00', to: '23:59' };
+  rules([{ ...all, name: 'Выходные', mode: 'pings', pings: 3 }]);
+  assert.strictEqual(cli(), `keepwarm: таймер кэша, прогревов 3 на ${today} («Выходные»), handoff\n`);
+  // не тот день — пропуск, срабатывает следующее
+  rules([{ ...all, days: [other], name: 'А', mode: 'pings', pings: 3 }, { ...all, name: 'Б', mode: 'until' }]);
+  assert.match(cli(), /^keepwarm: таймер кэша до .+ 23:59 \(«Б»\), handoff\n$/);
+  // не подошло ни одно — один прогрев; выключенный режим — прежний график
+  rules([{ ...all, days: [other] }]);
+  assert.strictEqual(cli(), `keepwarm: таймер кэша, один прогрев на ${today}, handoff\n`);
+  rules([{ ...all, mode: 'pings', pings: 3 }], false);
+  assert.doesNotMatch(cli(), /прогревов/);
+  // автозапуск по виду задачи: kinds правила; просьба пользователя ставит всегда
+  rules([{ ...all, mode: 'until', kinds: ['task'] }]);
+  assert.strictEqual(run('--prompt', 'auto', 'kind=ticket').status, 2);
+  assert.match(cli('auto', 'kind=task'), /^keepwarm: таймер кэша до /);
+  assert.match(cli('kind=ticket'), /^keepwarm: таймер кэша до /);
+  // «N прогревов»: срока нет — пинг с номером, после N-го пробуждения — handoff
+  const pingsPrompt = `keepwarm: таймер кэша, прогревов 2 на ${today}, handoff`;
+  assert.match(gate([human(60), answer(55)], pingsPrompt), /Обновление кэша — прогрев 1 из 2/);
+  assert.match(gate([human(120), answer(115), timer(60), answer(55)], pingsPrompt), /прогрев 2 из 2/);
+  assert.match(gate([human(180), answer(175), timer(120), answer(115), timer(60), answer(55)], pingsPrompt), /скилл handoff/);
+  fs.rmSync(local);
+}
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log('keepwarm-gate: ok');

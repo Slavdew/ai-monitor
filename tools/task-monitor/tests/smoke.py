@@ -103,12 +103,10 @@ try:
     except urllib.error.HTTPError as e:
         check('free без Origin → 403', e.code == 403, e.code)
     check('владелец снимает захват', post('claims', 'free', {'res': 'стенд'}).get('ok') is True)
-    check('actdone со страницы', post('tabs', 'actdone', {'dir': d, 'index': 5, 'note': 'готово'}).get('ok') is True)
-    try:
-        op.open(urllib.request.Request(f'{base}/api/tabs/actdone', json.dumps({'dir': d, 'index': 5}).encode()))
-        check('actdone без Origin → 403', False)
-    except urllib.error.HTTPError as e:
-        check('actdone без Origin → 403', e.code == 403, e.code)
+    # действие — вопрос вида act: вариант «Сделал» и свой текст, отправка той же кнопкой
+    post('tabs', 'draft', {'dir': d, 'n': 6, 'opt': 'Сделал'})
+    post('tabs', 'draft', {'dir': d, 'n': 6, 'text': 'готово'})
+    check('submit действия', post('tabs', 'submit', {'dir': d}).get('sent') == 1)
     # форма «+ Задача»: каталог вне git — задача и вложения; внутри git — отказ (задачи ведутся вне репозиториев)
     sys.path.insert(0, SRC)
     from monitor.core import git_root
@@ -140,8 +138,8 @@ code, out = tm('hook', stdin=hook_in)
 check('hook показывает ответ', 'a1#4' in out and 'да' in out, out)
 check('hook второй раз молчит', tm('hook', stdin=hook_in)[1] == '')
 out = tm('unseen')[1]
-check('unseen: действие выполнено', 'a1#6: ВЛАДЕЛЕЦ ВЫПОЛНИЛ ОЖИДАЕМОЕ ДЕЙСТВИЕ' in out and 'готово' in out, out)
-check('ack действия', tm('ack', 'a1', '6')[1] == 'ok')
+check('unseen: ответ на действие', 'a1#6: ОЖИДАЕМОЕ ДЕЙСТВИЕ: Запустить установщик' in out and 'Сделал' in out and 'готово' in out, out)
+check('ack действия', tm('ack', 'a1', '6', 'done')[1] == 'ok')
 check('ack (синоним «принят»)', tm('принят', 'a1', '4', 'done')[1] == 'ok')
 check('unseen пуст', tm('unseen')[1] == 'новых ответов нет')
 print(f'{len(fails)} ошибок, {time.time() - t0:.1f} с')

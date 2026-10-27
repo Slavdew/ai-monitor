@@ -106,6 +106,29 @@ function workday(now) {
   };
 }
 
+// Расширенный график (rulesOn и rules в настройках, правит панель): правила «дни + интервал + как поддерживать»
+// проверяются сверху вниз по текущему дню и времени, первое подошедшее задаёт поддержание; не подошло ни одно —
+// «один прогрев». Пересечения не проверяются: порядок — забота владельца (решение 27.10). Интервал через
+// полночь (23:00–02:00) тянется до утра, день — по началу интервала. 0 в days — воскресенье.
+const rulesOn = (cfg) => cfg.rulesOn === true && Array.isArray(cfg.rules) && cfg.rules.length > 0;
+function ruleAt(now, cfg) {
+  const d = new Date(now);
+  const x = d.getHours() * 60 + d.getMinutes();
+  for (const r of cfg.rules || []) {
+    if (!r || r.off) continue;
+    const from = minutes(r.from || '00:00');
+    const to = minutes(r.to || '23:59');
+    const night = to <= from;
+    const inTime = night ? x >= from || x < to : x >= from && x < to;
+    const day = night && x < to ? (d.getDay() + 6) % 7 : d.getDay();
+    if (inTime && (!Array.isArray(r.days) || r.days.includes(day))) {
+      const end = new Date(now).setHours(Math.floor(to / 60), to % 60, 0, 0);
+      return { ...r, end: end <= now ? end + 86400000 : end };
+    }
+  }
+  return null;
+}
+
 // Как поддерживать: до срока или «один прогрев». Сегодняшний таймер по умолчанию («конец дня»,
 // «один прогрев») следует за концом дня, заданным пользователем; таймер с явными часами — нет.
 // «Один прогрев» после этого конца — снова один прогрев (warmOnce). В старых запросах срока нет —
@@ -116,6 +139,8 @@ function planOf(prompt, now) {
   if (byDefault && day.set && prompt.includes(stamp(now).slice(0, 10))) {
     return { deadline: day.end, endOfDay: true, warmOnce: prompt.includes('один прогрев') };
   }
+  const p = /прогревов (\d+)/.exec(prompt);   // правило «N прогревов»: срока нет, счёт пробуждений
+  if (p) return { deadline: Infinity, pings: Number(p[1]) };
   const m = /до (\d\d)\.(\d\d)\.(\d{4}) (\d\d):(\d\d)/.exec(prompt);
   if (m) {
     return { deadline: new Date(+m[3], m[2] - 1, +m[1], +m[4], +m[5]).getTime(), endOfDay: prompt.includes('(конец дня)') };
@@ -127,8 +152,12 @@ function planOf(prompt, now) {
 // --prompt [часы] [true|false]: текст запроса для CronCreate. Без часов внеурочно — «один прогрев».
 // auto — таймер ставит сама сессия по правилам, а не по просьбе: при autoStart: false в графике
 // таймер не нужен (код 2).
+// kind=<вид> — вид задачи сессии (task.json kind: task, idea, ticket — обращение); в расширенном графике
+// автозапуск разрешает поле kinds правила.
 function timerPrompt(args, now) {
-  if (args.includes('auto') && config().autoStart === false) {
+  const cfg = config();
+  const auto = args.includes('auto');
+  if (auto && !rulesOn(cfg) && cfg.autoStart === false) {
     process.stdout.write('keepwarm: автозапуск выключен в графике — таймер не ставить\n');
     process.exitCode = 2;
     return;
@@ -136,6 +165,20 @@ function timerPrompt(args, now) {
   const hours = args.find((a) => /^\d+([.,]\d+)?$/.test(a));
   const mode = args.includes('false') ? 'без handoff' : 'handoff';
   const day = workday(now);
+  if (rulesOn(cfg) && !hours && !day.set) {
+    const r = ruleAt(now, cfg);
+    const kind = (args.find((a) => a.startsWith('kind=')) || 'kind=task').slice(5);
+    const name = r && r.name ? ` («${r.name}»)` : '';
+    if (auto && r && Array.isArray(r.kinds) && !r.kinds.includes(kind)) {
+      process.stdout.write(`keepwarm: по графику${name} автозапуск для вида «${kind}» выключен — таймер не ставить\n`);
+      process.exitCode = 2;
+      return;
+    }
+    if (!r) process.stdout.write(`keepwarm: таймер кэша, один прогрев на ${stamp(now).slice(0, 10)}, ${mode}\n`);
+    else if (r.mode === 'pings') process.stdout.write(`keepwarm: таймер кэша, прогревов ${Math.max(1, Number(r.pings) || 1)} на ${stamp(now).slice(0, 10)}${name}, ${mode}\n`);
+    else process.stdout.write(`keepwarm: таймер кэша до ${stamp(r.end)}${name}, ${mode}\n`);
+    return;
+  }
   if (!hours && (day.off || day.end <= now)) {
     process.stdout.write(`keepwarm: таймер кэша, один прогрев на ${stamp(now).slice(0, 10)}, ${mode}\n`);
     return;
@@ -244,7 +287,7 @@ function gate(data) {
   // настройки сессии из панели важнее запроса таймера: свой срок, счёт пробуждений, без передачки
   const own = sessionCfg(sid);
   const plan = own.until ? { deadline: Number(own.until) } : planOf(prompt, started);
-  const pings = Number(own.pings) || 0;
+  const pings = Number(own.pings) || plan.pings || 0;
   const s = scan(data.transcript_path);
   const idle = (started - s.answerAt) / 60000;   // ответа не нашёл — idle огромный, будим
   let reason = 'сессия активна';
@@ -252,7 +295,8 @@ function gate(data) {
     const once = plan.single || (plan.warmOnce && started >= plan.deadline);
     const counted = pings > 0 && s.wakes >= pings;   // пробуждения кончились раньше срока
     if (!counted && (once ? s.wakes < 1 : started < plan.deadline)) {
-      const tail = once ? 'последний прогрев' : `поддержание до ${hhmm(plan.deadline)}`;
+      const tail = once ? 'последний прогрев' : plan.deadline === Infinity ? `прогрев ${s.wakes + 1} из ${pings}`
+        : `поддержание до ${hhmm(plan.deadline)}`;
       process.stdout.write(PING.replace('{TAIL}', tail));
       return;
     }

@@ -23,13 +23,13 @@ const shown = new Set(store.get('shown', []));
 const pfilter = new Set(store.get('pfilter', []));
 // вопрос ждёт владельца, пока нет ответа (и просьбы перефразировать); отвеченный ждёт агента — в счётчик не входит
 const awaiting = (p) => p.status === 'wait' && !(p.answers || []).length && !p.rephrase;
-const nWait = (i) => (i.plan || []).filter(awaiting).length;
+const nWait = (i) => (i.plan || []).filter((p) => awaiting(p) && !p.act).length;   // действия — своим счётом, nAct
 // просьба владельца (пункт req) открыта, пока не сделана и не снята
 // отложенная просьба — не открытая: в плане под «отложено», в счёт «Просьбы» не входит
 const openReq = (p) => p.req && p.status !== 'wait' && !['done', 'skip', 'later'].includes(p.state);
 const nReq = (i) => (i.plan || []).filter(openReq).length;
 // ожидаемое действие владельца (пункт act: «запустить install.py»): открыто, пока он не отметит «сделано» / «не буду»
-const openAct = (p) => p.act && !['done', 'skip'].includes(p.state);
+const openAct = (p) => p.act && awaiting(p);
 const nAct = (i) => (i.plan || []).filter(openAct).length;
 // подписи статусов плана: коды остаются в данных и CLI, на странице — слова (ui.labels в конфиге)
 const label = (st) => (state.ui?.labels || {})[st] || st;
@@ -166,7 +166,7 @@ function qaHtml(i, p, k, edit) {
     : p.seen && (p.answers || []).length ? '<span class="sess ok">✓✓ Принято агентом</span>' : '';
   const asked = p.rephrase ? `<div class="ans">Просьба перефразировать${p.rephrase.text !== 'проще' ? ': ' + esc(p.rephrase.text) : ''} <span class="sess">· ${fmtTime(p.rephrase.at)}</span></div>` : '';
   const was = p.was ? `<div class="sess was">Было: <s>${esc(p.was)}</s></div>` : '';
-  const advice = p.note ? `<div class="advice"><span class="lbl">Совет агента</span> ${md(p.note, true, i)}</div>` : '';
+  const advice = p.note ? `<div class="advice"><span class="lbl">${p.act ? 'Пояснение' : 'Совет агента'}</span> ${md(p.note, true, i)}</div>` : '';
   const at = `data-key="${esc(key)}" data-dir="${esc(i.dir)}" data-index="${k}"`;
   const draft = drafts[key] ?? p.draft ?? '';
   const opt = optOf(p, key);
@@ -218,7 +218,7 @@ function planRow(i, p, k, full, answer = full) {
     : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="Сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${(p.req || p.act) && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && answer && openAct(p) ? `<span class="actbtns"><button class="btn sm primary" data-act="actdone" data-dir="${esc(i.dir)}" data-index="${k}">Сделано</button><button class="btn sm" data-act="actdone" data-skip="1" data-dir="${esc(i.dir)}" data-index="${k}" title="Агент узнает, что делать не будете">Не буду</button></span>` : ''}${p.act && p.owner_note ? `<span class="sess"> · ваш комментарий: ${esc(p.owner_note)}</span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length;
 const submitInner = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Отправить Claude (${nDraftOf(i)})</button>
@@ -627,18 +627,55 @@ async function saveReq(ref, dir) {
 const kwOpen = new Set();
 const hm = (ms) => (ms ? new Date(ms).toTimeString().slice(0, 5) : '');
 const DAYS = [[1, 'пн'], [2, 'вт'], [3, 'ср'], [4, 'чт'], [5, 'пт'], [6, 'сб'], [0, 'вс']];
+
+// расширенный график keepwarm: правила «дни + интервал + как поддерживать + для каких видов ставить самим»;
+// шлюз проверяет их сверху вниз, первое подошедшее — его значения (keepwarm-gate.js, ruleAt)
+const KINDS = [['task', 'Задачи'], ['idea', 'Идеи'], ['ticket', 'Обращения']];
+const RULES_SEED = [
+  { name: 'Будни', days: [1, 2, 3, 4, 5], from: '07:00', to: '23:30', mode: 'until', pings: 6, kinds: ['task'] },
+  { name: 'Выходные', days: [6, 0], from: '10:00', to: '23:00', mode: 'pings', pings: 6, kinds: ['task', 'idea'] },
+];
+const kwRules = () => (src('keepwarm').graph || {}).rules || [];
+function kwRulesRow() {
+  const rs = kwRules();
+  const row = (r, n) => `<div class="kwrule" data-r="${n}"><span class="id">${n + 1}</span>
+    <input type="text" data-f="name" value="${esc(r.name || '')}" placeholder="Название" maxlength="40">
+    <span class="kwdays">${DAYS.map(([d, t]) => `<label><input type="checkbox" data-f="day" value="${d}"${(r.days || []).includes(d) ? ' checked' : ''}>${t}</label>`).join('')}</span>
+    <label>с <input type="time" data-f="from" value="${esc(r.from)}"></label><label>до <input type="time" data-f="to" value="${esc(r.to)}"></label>
+    <select data-f="mode"><option value="until"${r.mode === 'until' ? ' selected' : ''}>до конца интервала</option><option value="pings"${r.mode === 'pings' ? ' selected' : ''}>по числу прогревов</option></select>
+    <label${r.mode === 'pings' ? '' : ' hidden'}><input type="number" data-f="pings" min="1" max="48" value="${esc(r.pings || 6)}"> прогревов</label>
+    <span class="kwkinds" title="Для каких видов задач сессия ставит таймер сама, без просьбы">Ставить самим: ${KINDS.map(([k, t]) => `<label><input type="checkbox" data-f="kind" value="${k}"${(r.kinds || ['task']).includes(k) ? ' checked' : ''}>${t}</label>`).join('')}</span>
+    <span class="grow"></span>
+    <button class="ibtn" data-act="kwrule" data-op="up" data-r="${n}" title="Выше: проверяется раньше"${n ? '' : ' disabled'}>↑</button>
+    <button class="ibtn" data-act="kwrule" data-op="down" data-r="${n}" title="Ниже"${n < rs.length - 1 ? '' : ' disabled'}>↓</button>
+    <button class="ibtn" data-act="kwrule" data-op="del" data-r="${n}" title="Удалить настройку">×</button></div>`;
+  return { key: 'kw-rules', cls: 'row kwg kwrules', html: `<div data-kwr>
+    <p class="sess">Настройки проверяются сверху вниз по текущему дню и времени — срабатывает первая подошедшая, остальные не смотрятся.
+      Не подошла ни одна — один прогрев. Интервал через полночь (23:00–02:00) относится к дню начала. «Сегодня до» важнее настроек.</p>
+    ${rs.map(row).join('')}
+    <button class="btn sm" data-act="kwrule" data-op="add">+ Настройка</button></div>` };
+}
+function kwRulesFromDom() {
+  return [...document.querySelectorAll('[data-kwr] .kwrule')].map((el) => {
+    const v = (f) => el.querySelector(`[data-f="${f}"]`).value;
+    const all = (f) => [...el.querySelectorAll(`[data-f="${f}"]:checked`)].map((x) => x.value);
+    return { name: v('name'), days: all('day').map(Number), from: v('from') || '00:00', to: v('to') || '23:59', mode: v('mode'), pings: +v('pings') || 6, kinds: all('kind') };
+  });
+}
 function kwGraphRow() {
   const k = src('keepwarm'), g = k.graph || {}, w = g.startWindow || ['07:00', '11:00'], off = new Set(g.offDays || []);
+  const ext = g.rulesOn === true, hide = ext ? ' hidden' : '';
   return { key: 'kw-graph', cls: 'row kwg', html: `<div class="kwf" data-kwg>
     <b title="По нему keepwarm решает, до какого времени держать кэш сессий">График</b>
-    <label title="Первый ввод за день в этом окне — день рабочий; вне окна — внеурочно, только один прогрев">Начало дня
+    <label${hide} title="Первый ввод за день в этом окне — день рабочий; вне окна — внеурочно, только один прогрев">Начало дня
       <input type="time" data-g="from" value="${esc(w[0])}"> – <input type="time" data-g="to" value="${esc(w[1])}"></label>
-    <label>Длится <input type="number" min="1" max="16" step="0.5" data-g="workdayHours" value="${esc(g.workdayHours)}"> ч</label>
-    <span class="kwdays" title="Выходные: весь день внеурочно">${DAYS.map(([n, d]) => `<label><input type="checkbox" data-g="off" value="${n}"${off.has(n) ? ' checked' : ''}>${d}</label>`).join('')}</span>
+    <label${hide}>Длится <input type="number" min="1" max="16" step="0.5" data-g="workdayHours" value="${esc(g.workdayHours)}"> ч</label>
+    <span class="kwdays"${hide} title="Выходные: весь день внеурочно">${DAYS.map(([n, d]) => `<label><input type="checkbox" data-g="off" value="${n}"${off.has(n) ? ' checked' : ''}>${d}</label>`).join('')}</span>
     <label title="Сегодня работаем до: день рабочий до этого времени, таймеры по умолчанию тянутся до него">Сегодня до
       <input type="time" data-g="dayend" value="${esc(hm(k.today?.end))}"></label>
-    <label title="Сессия сама ставит keepwarm до конца рабочего дня по обычным задачам; по обращениям — нет. Выключено — только по просьбе">
-      <input type="checkbox" data-g="autoStart"${g.autoStart === false ? '' : ' checked'}> Ставить самим по обычным задачам (не по обращениям)</label>
+    <label${hide} title="Сессия сама ставит keepwarm до конца рабочего дня; выключено — только по просьбе. По видам задач — в расширенной настройке">
+      <input type="checkbox" data-g="autoStart"${g.autoStart === false ? '' : ' checked'}> Ставить самим</label>
+    <label title="Несколько графиков: свои дни, интервал, способ поддержания и виды задач"><input type="checkbox" data-g="rulesOn"${ext ? ' checked' : ''}> Расширенная настройка</label>
   </div>` };
 }
 function kwSessionForm(s) {
@@ -671,6 +708,7 @@ async function kwSave(t) {
   if (g === 'workdayHours') return post('keepwarm', 'graph', { workdayHours: +t.value || null });
   if (g === 'off') return post('keepwarm', 'graph', { offDays: [...f.querySelectorAll('[data-g="off"]:checked')].map((x) => +x.value) });
   if (g === 'autoStart') return post('keepwarm', 'graph', { autoStart: t.checked });
+  if (g === 'rulesOn') return post('keepwarm', 'graph', t.checked && !kwRules().length ? { rulesOn: true, rules: RULES_SEED } : { rulesOn: t.checked });
 }
 
 function renderSessions() {
@@ -680,7 +718,7 @@ function renderSessions() {
   // настройки keepwarm — своим разделом с подписью и другим фоном: иначе сливаются с плашками сессий
   const head = (key, text) => ({ key, cls: 'tabsec static', html: `<h2>${text}</h2>` });
   const n = (src('sessions').list || []).length;
-  return [...(kw ? [head('kw-h', 'Keepwarm — поддержание кэша сессий'), kwGraphRow(), head('s-h', `Сессии <span class="cnt">${n}</span>`)] : []), ...(src('sessions').list || []).map((s) => [{
+  return [...(kw ? [head('kw-h', 'Keepwarm — поддержание кэша сессий'), kwGraphRow(), ...(src('keepwarm').graph?.rulesOn ? [kwRulesRow()] : []), head('s-h', `Сессии <span class="cnt">${n}</span>`)] : []), ...(src('sessions').list || []).map((s) => [{
     key: 's:' + s.sid,
     cls: 'row' + (s.alive ? '' : ' dead'),
     html: `<div class="head">${s.title ? `<span class="title">${esc(s.title)}</span>` : ''}
@@ -824,19 +862,23 @@ const items = () => src('tabs').items || [];
 const pending = () => items().filter((i) => (i.plan || []).some((p) => p.status === 'wait') || nReq(i) || nAct(i));
 function renderInbox() {
   const all = src('tabs').tabs || [];
-  const isAsked = (i) => (i.plan || []).some((p) => p.status === 'wait');
-  const st = subtabs(all.filter((t) => items().some((i) => inTab(i, t) && (isAsked(i) || nReq(i)))),
-    (t) => items().filter((i) => inTab(i, t)).reduce((s, i) => s + nWait(i), 0), true);
+  const isAsked = (i) => (i.plan || []).some((p) => p.status === 'wait' && !p.act);
+  const isActing = (i) => (i.plan || []).some((p) => p.status === 'wait' && p.act);
+  const st = subtabs(all.filter((t) => items().some((i) => inTab(i, t) && (isAsked(i) || isActing(i) || nReq(i)))),
+    (t) => items().filter((i) => inTab(i, t)).reduce((s, i) => s + nWait(i) + nAct(i), 0), true);
   const inSub = (i) => !st || !st.cur || inTab(i, { id: st.cur });
   const asked = items().filter((i) => isAsked(i) && inSub(i));
   const withReq = items().filter((i) => nReq(i) && inSub(i));
   const rows = st ? [st.row] : [];
   // ожидаемые действия — первыми: агент стоит, пока их не сделать
-  const acting = items().filter((i) => nAct(i) && inSub(i));
+  const acting = items().filter((i) => isActing(i) && inSub(i));
   if (acting.length) rows.push({ key: 'act-h', cls: 'tabsec static', html: `<h2>Ожидаемые действия <span class="cnt">${acting.reduce((s, i) => s + nAct(i), 0)}</span></h2>` });
-  for (const i of acting) {
-    const acts = (i.plan || []).map((p, k) => (openAct(p) ? planRow(i, p, k, false, true) : '')).join('');
-    rows.push({ key: 'act:' + i.tab + ':' + i.id, cls: 'row card inbox', html: `<div class="dhead"><span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>${cardBtn(i)}</div><ul class="plan">${acts}</ul>` });
+  for (const i of acting) {   // как блок вопросов: варианты «Сделал» / «Не буду», свой ответ, «проще», отправка
+    const fk = 'ina:' + i.tab + '|' + i.id, open = !fold.has(fk);
+    const acts = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && p.act ? planRow(i, p, k, false, true) : '')).join('') : '';
+    rows.push({ key: 'act:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
+      html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
+        ${nAct(i) ? `<span class="tag wait">Действия: ${nAct(i)}</span>` : ''}${cardBtn(i)}</div>${open ? `<ul class="plan">${acts}</ul>${submitHtml(i)}` : ''}` });
   }
   if (acting.length) rows.push({ key: 'q-h', cls: 'tabsec static', html: '<h2>Вопросы</h2>' });
   const drafted = asked.filter(nDraftOf);
@@ -844,8 +886,8 @@ function renderInbox() {
   if (!asked.length) rows.push({ key: 'in-none', cls: 'empty', html: 'Вопросов нет' });
   for (const i of asked) {
     const fk = 'in:' + i.tab + '|' + i.id, open = !fold.has(fk);
-    const asks = open ? (i.plan || []).map((p, k) => (p.status === 'wait' ? planRow(i, p, k, false, true) : '')).join('') : '';
-    const n = nWait(i), done = (i.plan || []).filter((p) => p.status === 'wait').length - n;
+    const asks = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && !p.act ? planRow(i, p, k, false, true) : '')).join('') : '';
+    const n = nWait(i), done = (i.plan || []).filter((p) => p.status === 'wait' && !p.act).length - n;
     rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
         ${n ? `<span class="tag wait">Ждут вас: ${n}</span>` : ''}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
@@ -1094,12 +1136,12 @@ document.addEventListener('click', async (e) => {
     await ntSave();
   } else if (a === 'ntcancel') {
     nt = null; render();
-  } else if (a === 'actdone') {
-    const skip = !!t.dataset.skip;
-    const note = skip ? prompt('Почему не будете? (агент увидит; можно пусто)') : '';
-    if (note === null) return;
-    const r = await post('tabs', 'actdone', { dir: t.dataset.dir, index: +t.dataset.index, skip, note });
-    if (r.ok) toast(skip ? 'Агент узнает, что действия не будет' : 'Отмечено — агент проверит результат');
+  } else if (a === 'kwrule') {
+    const rs = kwRulesFromDom(), n = +t.dataset.r, op = t.dataset.op;
+    if (op === 'add') rs.push({ name: '', days: [], from: '00:00', to: '23:59', mode: 'until', pings: 6, kinds: ['task'] });
+    else if (op === 'del') { if (!confirm(`Удалить настройку ${n + 1}?`)) return; rs.splice(n, 1); }
+    else { const m = op === 'up' ? n - 1 : n + 1; [rs[n], rs[m]] = [rs[m], rs[n]]; }
+    await post('keepwarm', 'graph', { rules: rs });
   } else if (a === 'free') {
     await post('claims', 'free', { res: t.dataset.res });
   } else if (a === 'select') {
@@ -1145,6 +1187,11 @@ document.addEventListener('focusout', async (e) => {
 });
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.closest('[data-kwr]')) {   // правило расширенного графика — все правила разом, порядок из окна
+    if (t.dataset.f === 'mode') t.closest('.kwrule').querySelector('[data-f="pings"]').parentElement.hidden = t.value !== 'pings';
+    try { await post('keepwarm', 'graph', { rules: kwRulesFromDom() }); toast('Сохранено'); } catch (err) { toast('Не сохранилось: ' + err.message); }
+    return;
+  }
   if (t.closest('[data-kws],[data-kwg]')) { try { await kwSave(t); toast('Сохранено'); } catch (err) { toast('Не сохранилось: ' + err.message); } return; }
   if (t.dataset.act === 'reph') {
     const rk = t.dataset.key + '|r';
