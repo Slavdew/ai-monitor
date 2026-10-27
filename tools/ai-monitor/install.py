@@ -228,9 +228,11 @@ def autostart():
 
 def restart_server():
     """Сервер и трей — из новой версии: прежние (task-monitor или другая версия) останавливаются."""
+    # $PID — сама эта команда: в её строке тоже есть «server.py|tray.ps1», без исключения она останавливала себя
+    # раньше старого трея (28.10 старый трей task-monitor пережил установку)
     ps("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'server\\.py|tray\\.ps1' -and "
-       "$_.CommandLine -notmatch 'install\\.py' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
-       "-ErrorAction SilentlyContinue }")
+       "$_.CommandLine -notmatch 'install\\.py' -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process "
+       "-Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
     time.sleep(1)
     subprocess.Popen(['cmd', '/c', os.path.join(RUN, 'start.cmd'), '/silent'], cwd=RUN,
                      creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
