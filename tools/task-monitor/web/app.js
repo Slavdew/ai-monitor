@@ -865,9 +865,13 @@ document.addEventListener('click', async (e) => {
     // вариант ответа: повторный щелчок снимает; старую галочку «проще» заменяет вариант
     const v = t.getAttribute('aria-checked') === 'true' ? '' : t.dataset.v;
     drafts[t.dataset.key + '|o'] = v || null; delete drafts[t.dataset.key + '|r'];
+    // отметка — сразу на месте: пока фокус в поле ответа, render отложен до ухода из него
+    t.closest('.qopts')?.querySelectorAll('.qopt').forEach((b) => { const on = b === t && !!v; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
+    const ta = document.querySelector(`textarea[data-key="${CSS.escape(t.dataset.key)}"]`);
+    t.closest('li.q')?.classList.toggle('drafted', !!v || !!ta?.value.trim());
     await post('tabs', 'draft', { dir: t.dataset.dir, index: +t.dataset.index, opt: v, rephrase: null });
     render();
-    document.querySelector(`textarea[data-key="${CSS.escape(t.dataset.key)}"]`)?.focus();
+    ta?.focus();
   } else if (a === 'stage') {
     sfil[t.dataset.ref] = sfil[t.dataset.ref] === t.dataset.v ? '' : t.dataset.v; store.set('sfil', sfil);
     if (sfil[t.dataset.ref]) { ctab[t.dataset.ref] = 'plan'; store.set('ctab', ctab); }
@@ -966,6 +970,9 @@ document.addEventListener('input', (e) => {
   clearTimeout(draftTimers[el.dataset.key]);
   draftTimers[el.dataset.key] = setTimeout(() => saveDraft(el), 1000);
 });
+// вариант ответа не забирает фокус у поля: иначе уход фокуса перерисует вопрос между нажатием и
+// отпусканием, кнопка под мышью сменится — и повторный щелчок (снять вариант) потеряется
+document.addEventListener('pointerdown', (e) => { if (e.button === 0 && e.target.closest('.qopt')) e.preventDefault(); });
 document.addEventListener('focusout', async (e) => {
   const el = e.target;
   if (el.dataset?.act === 'draft' && draftTimers[el.dataset.key]) await saveDraft(el);
