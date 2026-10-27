@@ -44,8 +44,10 @@ def fetch(src):
 
 def collect(cfg, src, ctx):
     data, error = fetch(src)
-    if error.startswith('нет ответа'):   # TLS через прокси изредка рвётся на рукопожатии — один повтор
-        time.sleep(5)
+    for wait in (5, 20, 60):   # TLS через прокси рвётся на рукопожатии сериями — повторы с паузой
+        if not error.startswith('нет ответа'):
+            break
+        time.sleep(wait)
         data, error = fetch(src)
     if data:
         limits = []

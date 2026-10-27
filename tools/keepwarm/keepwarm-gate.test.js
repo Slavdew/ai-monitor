@@ -67,7 +67,7 @@ assert.match(gate([human(60), answer(55)], timerPrompt(120)), /Обновлен�
 assert.match(gate([human(120), answer(115), timer(60), answer(55)], timerPrompt(120)), /Обновление кэша/);
 // срок истёк, молчит — handoff с готовым именем файла; пинги до срока не в счёт
 const handoff = gate([human(120), answer(115), timer(60), answer(55)], timerPrompt(-10));
-assert.match(handoff, /CronDelete.*handoff-\d{8}-\d{6}\.md.*work\\handoffs\\handoff-\d{8}-\d{6}\.md.*по окончании поддержания кэша.*около \d\d:\d\d\./s);
+assert.match(handoff, /CronDelete.*скилл handoff.*tasks\\<номер> <тема>.*work\\handoffs.*по окончании поддержания кэша.*около \d\d:\d\d\./s);
 assert.doesNotMatch(handoff, /\{[A-Z]+\}/);
 assert.match(gate([human(60), answer(55)], `${timerPrompt(-10).replace(', handoff', ' (конец дня), handoff')}`), /по окончании рабочего дня/);
 // срок истёк, но сессия в работе — гасит, handoff ждёт, пока сессия замолчит
@@ -139,6 +139,30 @@ setDay({ start: Date.now() - 10 * 3600000 });
 if (new Date(Date.now() - 10 * 3600000).toDateString() === new Date().toDateString()) {
   assert.strictEqual(cli(), `keepwarm: таймер кэша, один прогрев на ${today}, handoff\n`);
 }
+
+// настройки сессии из панели (session/<sid>.json) важнее запроса таймера
+setDay({ start: at(15, 0) });
+const own = path.join(tmp, 'keepwarm', 'session', 's1.json');
+fs.mkdirSync(path.dirname(own), { recursive: true });
+const setOwn = (o) => fs.writeFileSync(own, JSON.stringify(o));
+setOwn({ pings: 2 });   // два пробуждения, третье — передачка, хотя срок впереди
+assert.match(gate([human(120), answer(115), timer(60), answer(55)], timerPrompt(120)), /Обновление кэша/);
+assert.match(gate([human(180), answer(175), timer(120), answer(115), timer(60), answer(55)], timerPrompt(120)), /скилл handoff.*по окончании поддержания кэша/s);
+assert.match(gate([human(240), answer(235), timer(180), answer(175), timer(120), answer(115), timer(60), answer(55)], timerPrompt(120)), /поддержание завершено/);
+setOwn({ until: Date.now() - 60000 });   // свой срок прошёл — передачка, хотя таймер до вечера
+assert.match(gate([human(60), answer(55)], timerPrompt(120)), /скилл handoff/);
+setOwn({ until: Date.now() - 60000, handoff: false });
+assert.match(gate([human(60), answer(55)], timerPrompt(120)), /Поддержание кэша завершено/);
+setOwn({ until: Date.now() - 60000, handoff: true });   // передачка, хотя таймер «без handoff»
+assert.match(gate([human(60), answer(55)], timerPrompt(120, 'без handoff')), /скилл handoff/);
+fs.rmSync(own);
+// личный график поверх общего: автозапуск выключен — auto не ставит таймер, просьба ставит
+const local = path.join(tmp, 'keepwarm', 'config.json');
+fs.writeFileSync(local, JSON.stringify({ autoStart: false }));
+assert.strictEqual(run('--prompt', 'auto').status, 2);
+assert.match(cli(), /^keepwarm: таймер кэша до /);
+fs.rmSync(local);
+assert.match(cli('auto'), /^keepwarm: таймер кэша до /);
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log('keepwarm-gate: ok');

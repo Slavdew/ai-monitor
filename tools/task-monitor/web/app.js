@@ -124,11 +124,11 @@ function claimTag(i, release) {
   if (!c) return '';
   const s = (src('sessions').list || []).find((x) => x.sid === c.sid);
   const who = s ? (s.title || s.sid.slice(0, 8)) : c.sid.slice(0, 8);
-  return `<span class="tag claim" title="взята сессией ${esc(c.sid)}">взята: ${esc(who)}</span>`
-    + (release ? ` <button class="ibtn" data-act="release" data-task="${esc(i.id)}" title="отпустить захват">×</button>` : '');
+  return `<span class="tag claim" title="Взята сессией ${esc(c.sid)}">Взята: ${esc(who)}</span>`
+    + (release ? ` <button class="ibtn" data-act="release" data-task="${esc(i.id)}" title="Отпустить захват">×</button>` : '');
 }
 
-const cardBtn = (i) => `<button class="ibtn go" data-act="card" data-ref="${esc(i.tab + '|' + i.id)}" title="открыть карточку задачи">↗</button>`;
+const cardBtn = (i) => `<button class="ibtn go" data-act="card" data-ref="${esc(i.tab + '|' + i.id)}" title="Открыть карточку задачи">↗</button>`;
 
 // --- вопросы владельцу: пункт плана q; ответ черновиком (сохраняется сам), «Отправить Claude» — пачкой по задаче ---
 
@@ -142,25 +142,25 @@ const fmtTime = (ms) => new Date(ms).toLocaleString('ru-RU', { day: '2-digit', m
 function qaHtml(i, p, k, edit) {
   const key = i.dir + '|' + k;
   const answers = (p.answers || []).map((a) => `<div class="ans">${linkPaths(esc(a.text), i.paths)} <span class="sess">· ${fmtTime(a.at)}</span></div>`).join('');
-  const status = p.seen === false ? '<span class="sess unread">✓ отправлено, ждёт агента</span>'
-    : p.seen && (p.answers || []).length ? '<span class="sess ok">✓✓ принято агентом</span>' : '';
+  const status = p.seen === false ? '<span class="sess unread">✓ Отправлено, ждёт агента</span>'
+    : p.seen && (p.answers || []).length ? '<span class="sess ok">✓✓ Принято агентом</span>' : '';
   const asked = p.rephrase ? `<div class="ans">Просьба перефразировать${p.rephrase.text !== 'проще' ? ': ' + esc(p.rephrase.text) : ''} <span class="sess">· ${fmtTime(p.rephrase.at)}</span></div>` : '';
-  const was = p.was ? `<div class="sess was">было: <s>${esc(p.was)}</s></div>` : '';
+  const was = p.was ? `<div class="sess was">Было: <s>${esc(p.was)}</s></div>` : '';
   const advice = p.note ? `<div class="advice"><span class="lbl">Совет агента</span> ${md(p.note, true, i)}</div>` : '';
   const at = `data-key="${esc(key)}" data-dir="${esc(i.dir)}" data-index="${k}"`;
   const draft = drafts[key] ?? p.draft ?? '';
   const opt = optOf(p, key);
-  const optName = (v) => (v === '@reword' ? '↺ проще' : v === '@advice' ? '★ Как советуешь' : v);
+  const optName = (v) => (v === '@reword' ? '↺ Проще' : v === '@advice' ? '★ Как советуешь' : v);
   if (!edit) {   // только смотреть: черновик серым, ответ — в карточке
     return `<div class="qa">${advice}${was}${answers}${asked}${status}
-      ${draft || opt ? `<div class="sess">черновик: ${opt ? `«${esc(optName(opt))}»` : ''}${opt && draft ? ' + ' : ''}${draft ? `«${esc(draft)}»` : ''}</div>` : ''}
+      ${draft || opt ? `<div class="sess">Черновик: ${opt ? `«${esc(optName(opt))}»` : ''}${opt && draft ? ' + ' : ''}${draft ? `«${esc(draft)}»` : ''}</div>` : ''}
       ${awaiting(p) ? `<span><button class="btn sm" data-act="answer" data-ref="${esc(i.tab + '|' + i.id)}" data-k="${k}">Ответить ↗</button></span>` : ''}</div>`;
   }
   const open = awaiting(p) || draft || opt || shown.has('add:' + key);
-  if (!open) return `<div class="qa">${advice}${was}${answers}${asked}${status}${p.status === 'wait' ? `<span><button class="btn sm" data-act="show" data-key="add:${esc(key)}">дополнить ответ</button></span>` : ''}</div>`;
-  const opts = [['@reword', 'вопрос непонятен — агент перепишет проще; в поле — что именно непонятно'],
+  if (!open) return `<div class="qa">${advice}${was}${answers}${asked}${status}${p.status === 'wait' ? `<span><button class="btn sm" data-act="show" data-key="add:${esc(key)}">Дополнить ответ</button></span>` : ''}</div>`;
+  const opts = [['@reword', 'Вопрос непонятен — агент перепишет проще; в поле — что именно непонятно'],
     ...(p.note ? [['@advice', 'ответ — совет агента; в поле — дополнение']] : []), ...(p.opts || []).map((o) => [o, ''])];
-  const bar = `<div class="qopts" role="radiogroup" aria-label="варианты ответа">${opts.map(([v, tip]) =>
+  const bar = `<div class="qopts" role="radiogroup" aria-label="Варианты ответа">${opts.map(([v, tip]) =>
     `<button class="qopt${v === opt ? ' on' : ''}${v === '@reword' ? ' rw' : v === '@advice' ? ' adv' : ''}" role="radio" aria-checked="${v === opt}"
       data-act="qopt" ${at} data-v="${esc(v)}"${tip ? ` title="${esc(tip)}"` : ''}>${esc(optName(v))}</button>`).join('')}</div>`;
   const ph = opt === '@reword' ? 'Что непонятно (необязательно)'
@@ -179,25 +179,25 @@ async function saveDraft(el) {
   const r = await post('tabs', 'draft', { dir: el.dataset.dir, index: +el.dataset.index, [el.dataset.field || 'text']: el.value });
   // не сохранилось — поле остаётся красным до удачной записи: ответ не теряется молча
   el.classList.toggle('unsaved', !r.ok);
-  el.title = r.ok ? '' : `не сохранено: ${r.error || 'ошибка'} — любая правка или уход из поля повторит`;
+  el.title = r.ok ? '' : `Не сохранено: ${r.error || 'ошибка'} — любая правка или уход из поля повторит`;
   if (!r.ok) draftTimers[el.dataset.key] = -1;   // отметка «не сохранено»: уход из поля и отправка повторят запись
 }
 
 // пункт плана; full — карточка: статус меняется меню (в предпросмотре легко задеть случайно);
 // answer — поле ответа у вопроса (карточка и «Ждут вас»)
 function planRow(i, p, k, full, answer = full) {
-  const mark = p.state === 'waiting' ? `<span class="dep wait" title="ждёт пунктов">⏳ после ${p.waits.join(', ')}</span>`
-    : p.parallel && full && !p.req && p.state === 'ready' ? '<span class="dep"><span class="tag par" title="можно вести одновременно с другими готовыми">парал.</span></span>' : '<span class="dep"></span>';
-  const st = p.status === 'wait' ? (awaiting(p) ? `<span class="tag st wait" title="вопрос: ждёт вашего ответа">${esc(label('wait'))}</span>`
-      : '<span class="tag st ok" title="ответ отправлен, ждёт агента">отвечено</span>')
-    : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
+  const mark = p.state === 'waiting' ? `<span class="dep wait" title="Ждёт пунктов">⏳ После ${p.waits.join(', ')}</span>`
+    : p.parallel && full && !p.req && p.state === 'ready' ? '<span class="dep"><span class="tag par" title="Можно вести одновременно с другими готовыми">Парал.</span></span>' : '<span class="dep"></span>';
+  const st = p.status === 'wait' ? (awaiting(p) ? `<span class="tag st wait" title="Вопрос: ждёт вашего ответа">${esc(label('wait'))}</span>`
+      : '<span class="tag st ok" title="Ответ отправлен, ждёт агента">Отвечено</span>')
+    : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="Сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="ваша просьба">просьба</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length;
 const submitHtml = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Отправить Claude (${nDraftOf(i)})</button>
-      <span class="sess">черновики видны только вам, пока не отправлены</span></p>` : '');
+      <span class="sess">Черновики видны только вам, пока не отправлены</span></p>` : '');
 const copyBtn = (text, what) => `<button class="btn" data-copy="${esc(text)}" title="${esc(text)}">⧉ ${what}</button>`;
 
 // Markdown в тексте задачи: полный — цель, описание, заметки; строчный — «Дальше», пункты, вопросы.
@@ -208,10 +208,10 @@ function md(text, inline, i) {
   if (!window.marked || !window.DOMPurify) return esc(text);
   const html = DOMPurify.sanitize(inline ? marked.parseInline(String(text)) : marked.parse(String(text)))
     .replace(/<h[1-4]>/g, '<h5>').replace(/<\/h[1-4]>/g, '</h5>');
-  return linkPaths(html.replace(/<code>([^<]*)<\/code>/g, '<code class="copy" data-copy="$1" tabindex="0" title="скопировать">$1</code>'), i?.paths);
+  return linkPaths(html.replace(/<code>([^<]*)<\/code>/g, '<code class="copy" data-copy="$1" tabindex="0" title="Скопировать">$1</code>'), i?.paths);
 }
 const fileLink = (a, abs) => {
-  a.href = fileUrl(abs); a.target = '_blank'; a.rel = 'noopener'; a.title = abs; a.className = 'flink';
+  a.href = viewUrl(abs); a.target = '_blank'; a.rel = 'noopener'; a.title = abs; a.className = 'flink';
   a.dataset.ctx = 'doc'; a.dataset.path = abs;
   if (INPANEL.has(extOf(abs))) a.dataset.doc = abs;
 };
@@ -241,16 +241,16 @@ function linkPaths(html, paths) {
 }
 
 const PRIO = { 1: ['!1', 'bad', 'срочно'], 2: ['!2', 'wait', 'важно'], 3: null, 4: ['↓', '', 'потом'] };
-const prioTag = (i) => { const p = PRIO[i.priority]; return p ? `<span class="tag prio ${p[1]}" title="приоритет: ${p[2]}">${p[0]}</span>` : ''; };
+const prioTag = (i) => { const p = PRIO[i.priority]; return p ? `<span class="tag prio ${p[1]}" title="Приоритет: ${p[2]}">${p[0]}</span>` : ''; };
 // подсказка (title) — плоский текст: разметку Markdown снимаем, списки остаются строками
 const plain = (s) => String(s || '').replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, '$1$2').replace(/`([^`]+)`/g, '$1')
   .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/^#+\s*/gm, '');
-const stageTag = (i) => (i.stage ? `<span class="tag stage" title="этап${i.current ? ' · в работе: ' + esc(plain(i.current)) : ''}">${md(i.stage, true, i)}${i.stage_n ? ' ' + i.stage_n : ''}</span>` : '');
+const stageTag = (i) => (i.stage ? `<span class="tag stage" title="Этап${i.current ? ' · в работе: ' + esc(plain(i.current)) : ''}">${md(i.stage, true, i)}${i.stage_n ? ' ' + i.stage_n : ''}</span>` : '');
 // здоровье задачи (ставит агент): риск — оранжевым, стоит — красным с причиной; ok не рисуется.
 // Щелчок — пояснение с причиной (поля risk / blocked) и кнопкой снять.
 const HEALTH = {
-  risk: ['⚠ риск', 'wait', 'Риск: агент считает, что задача может не успеть к сроку или уйти не туда — стоит посмотреть, пока не поздно.'],
-  blocked: ['⛔ стоит', 'bad', 'Стоит: работа не двигается, пока не снимут внешнюю причину (ИТ, руководитель, другая задача).'],
+  risk: ['⚠ Риск', 'wait', 'Риск: агент считает, что задача может не успеть к сроку или уйти не туда — стоит посмотреть, пока не поздно.'],
+  blocked: ['⛔ Стоит', 'bad', 'Стоит: работа не двигается, пока не снимут внешнюю причину (ИТ, руководитель, другая задача).'],
 };
 const healthKind = (i) => (i.health === 'blocked' || i.blocked ? 'blocked' : i.health === 'risk' ? 'risk' : '');
 const healthWhy = (i) => (healthKind(i) === 'blocked' ? i.blocked : i.risk) || '';
@@ -265,8 +265,8 @@ function healthPop(t) {
   const i = findItem(t.dataset.ref), k = i && healthKind(i);
   if (!k) return;
   const why = healthWhy(i);
-  menu(t, `<div class="mpop"><p>${esc(HEALTH[k][2])}</p><p><b>Причина:</b> ${why ? md(why, true, i) : '<span class="sess">агент не указал — спросите в сессии задачи или в вопросе</span>'}</p></div><hr>`
-    + mi('card', 'Открыть карточку') + mi('clear', k === 'risk' ? 'Снять риск' : 'Снять «стоит»'), async (b) => {
+  menu(t, `<div class="mpop"><p>${esc(HEALTH[k][2])}</p><p><b>Причина:</b> ${why ? md(why, true, i) : '<span class="sess">Агент не указал — спросите в сессии задачи или в вопросе</span>'}</p></div><hr>`
+    + mi('card', 'Открыть карточку') + mi('clear', k === 'risk' ? 'Снять риск' : 'Снять «Стоит»'), async (b) => {
     if (b.dataset.m === 'card') openCard(t.dataset.ref);
     else if (b.dataset.m === 'clear') {
       await post('tabs', 'field', { dir: i.dir, field: 'health', value: '' });
@@ -297,12 +297,12 @@ function stageBar(i, ref) {
     + (x.total > 12 ? `\n… ещё ${x.total - 12}` : '');
   const cur = ss.find((x) => x.st === 'cur');
   return `<div class="sb-cap">Этапы — разделы плана; щелчок по этапу — его пункты${cur ? ` · <b>сейчас: этап ${cur.n} из ${cur.of} «${esc(cur.name)}»</b>, сделано ${cur.done} из ${cur.total}` : ''}</div>
-  <ol class="stagebar" aria-label="этапы">${ss.map((x) => `<li class="${x.st}${sfil[ref] === x.name ? ' on' : ''}" title="${esc(tip(x))}" data-act="stage" data-ref="${esc(ref)}" data-v="${esc(x.name)}" tabindex="0" role="button" aria-pressed="${sfil[ref] === x.name}">
+  <ol class="stagebar" aria-label="Этапы">${ss.map((x) => `<li class="${x.st}${sfil[ref] === x.name ? ' on' : ''}" title="${esc(tip(x))}" data-act="stage" data-ref="${esc(ref)}" data-v="${esc(x.name)}" tabindex="0" role="button" aria-pressed="${sfil[ref] === x.name}">
     <i style="width:${Math.round(100 * x.done / x.total)}%"></i><span class="nm">${x.st === 'done' ? '✓ ' : x.st === 'cur' ? '● ' : ''}${esc(x.name)}</span>
-    <b>${x.done}/${x.total}</b>${x.st === 'cur' ? `<span class="sn">этап ${x.n}/${x.of}</span>` : ''}</li>`).join('')}</ol>`;
+    <b>${x.done}/${x.total}</b>${x.st === 'cur' ? `<span class="sn">Этап ${x.n}/${x.of}</span>` : ''}</li>`).join('')}</ol>`;
 }
 
-const remainTag = (i) => (i.remain == null ? '' : `<span class="sess remain" title="осталось пунктов плана: к работе, в работе, вопросы">${i.remain ? 'осталось ' + i.remain : 'всё сделано'}</span>`);
+const remainTag = (i) => (i.remain == null ? '' : `<span class="sess remain" title="Осталось пунктов плана: к работе, в работе, вопросы">${i.remain ? 'Осталось ' + i.remain : 'Всё сделано'}</span>`);
 
 // вкладки карточки: последняя выбранная для задачи; впервые — «Вопросы», если ждут ответа, иначе «План»
 const ctab = store.get('ctab', {});
@@ -324,9 +324,9 @@ function taskView(i, mode) {
 
   // паспорт: суть, где остановились, ход, сведения — всегда на виду
   const facts = [i.changed && `изм. <span class="ago" data-ts="${i.changed}"></span>`,
-    i.updated && `handoff ${esc(String(i.updated).slice(0, 10))}${i.stale ? ' <span class="tag stale" title="файлы новее handoff">устарел</span>' : ''}`,
+    i.updated && `handoff ${esc(String(i.updated).slice(0, 10))}${i.stale ? ' <span class="tag stale" title="Файлы новее handoff">Устарел</span>' : ''}`,
     i.project && esc(i.project), s.n && `<b class="live">●${s.n}</b> ${names.join(', ')}`, claimTag(i, card),
-    (i.waits || []).length && `<span class="tag blocked">⏳ ждёт ${esc(i.waits.join(', '))}</span>`].filter(Boolean).join(' · ');
+    (i.waits || []).length && `<span class="tag blocked">⏳ Ждёт ${esc(i.waits.join(', '))}</span>`].filter(Boolean).join(' · ');
   const summary = `<section class="t-sum"><div class="t-sumbody">${i.goal ? `<div class="goal mdx">${md(i.goal, false, i)}</div>` : ''}${i.desc ? `<div class="desc mdx">${md(i.desc, false, i)}</div>` : ''}
       ${i.next ? `<div class="t-next"><span class="lbl">Дальше</span> ${md(i.next, true, i)}</div>` : ''}
       ${i.current ? `<div class="t-cur"><span class="lbl">В работе</span> ${md(i.current, true, i)}</div>` : ''}
@@ -367,7 +367,7 @@ function taskView(i, mode) {
     return n ? `<li class="psec" data-act="fold" data-id="${esc(sk)}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}${esc(x)} <span class="cnt">${n}</span></li>${rows}` : '';
   }).join('');
   const reqs = plan.map((p, k) => (openReq(p) ? row(p, k) : '')).join('');
-  const pPanel = sf ? `<p class="sfil">Этап «${esc(sf)}» — все его пункты <button class="btn sm" data-act="stage" data-ref="${esc(ref)}" data-v="">× все этапы</button></p>
+  const pPanel = sf ? `<p class="sfil">Этап «${esc(sf)}» — все его пункты <button class="btn sm" data-act="stage" data-ref="${esc(ref)}" data-v="">× Все этапы</button></p>
     <ul class="plan">${planList}</ul>`
     : `${reqs ? `<h4 class="asks">Ваши просьбы · ${nReq(i)}</h4><ul class="plan">${reqs}</ul><h4 class="asks">План</h4>` : ''}
     ${chips}
@@ -378,7 +378,7 @@ function taskView(i, mode) {
   const docs = i.docs || [];
   const fItem = (d) => {
     const loc = isLocal(d.url), e = extOf(d.url);
-    return `<li data-ctx="doc" data-path="${esc(d.url)}"><a href="${esc(loc ? fileUrl(d.url) : d.url)}" target="_blank" rel="noopener"${loc && INPANEL.has(e) ? ` data-doc="${esc(d.url)}"` : ''}><span class="k">${loc ? esc(e || 'файл') : '↗'}</span>${esc(docName(d))}</a>
+    return `<li data-ctx="doc" data-path="${esc(d.url)}"><a href="${esc(loc ? viewUrl(d.url) : d.url)}" target="_blank" rel="noopener"${loc && INPANEL.has(e) ? ` data-doc="${esc(d.url)}"` : ''}><span class="k">${loc ? esc(e || 'файл') : '↗'}</span>${esc(docName(d))}</a>
       <code class="copy fpath" data-copy="${esc(d.url)}" tabindex="0" title="${esc(d.url)}">${esc(d.url)}</code></li>`;
   };
   const fGroup = (kind, title, hint) => {
@@ -392,8 +392,8 @@ function taskView(i, mode) {
   const sessRows = (src('sessions').list || []).filter((x) => x.alive && x.task === i.id)
     .map((x) => `<li><b>${esc(x.title || x.sid.slice(0, 8))}</b> <span class="tag ${x.status === 'busy' ? 'active' : ''}">${esc(label(x.status))}</span> ${agoSpan(x.last)}</li>`).join('');
   const kv = [
-    ['Продолжить', i.resume && `<code class="copy" data-copy="${esc(i.resume)}" tabindex="0" title="скопировать">${esc(i.resume)}</code>`],
-    ['Каталог', `<code class="copy" data-copy="${esc(i.dir)}" tabindex="0" title="скопировать">${esc(i.dir)}</code>`],
+    ['Продолжить', i.resume && `<code class="copy" data-copy="${esc(i.resume)}" tabindex="0" title="Скопировать">${esc(i.resume)}</code>`],
+    ['Каталог', `<code class="copy" data-copy="${esc(i.dir)}" tabindex="0" title="Скопировать">${esc(i.dir)}</code>`],
     ['Связи', links],
     ['Handoff', i.updated && esc(i.updated) + (i.stale ? ` · новее него файлов: ${i.stale}` : '')],
     ['Сессия', i.session && `<code class="copy" data-copy="${esc(i.session)}" tabindex="0">${esc(i.session)}</code>`],
@@ -424,12 +424,12 @@ function itemRow(i, child, kids, last) {
       ${prioTag(i)}<span class="id">${esc(i.id)}</span><span class="title" title="${esc(i.title)}">${esc(i.title)}</span>${stageTag(i)}${healthTag(i)}
       <span class="grow"></span>
       ${i.parent_kind === 'link' ? `<span class="tag link">→ ${esc(i.parent)}</span>` : ''}
-      ${nWait(i) ? `<span class="tag wait" title="вопросы ждут вашего ответа">ждут вас: ${nWait(i)}</span>` : ''}
-      ${nReq(i) ? `<span class="tag req" title="ваши просьбы, ещё не сделанные">просьбы: ${nReq(i)}</span>` : ''}
-      ${(i.waits || []).length ? `<span class="tag blocked" title="заблокирована незавершёнными задачами">⏳ ждёт ${esc(i.waits.join(', '))}</span>` : ''}
+      ${nWait(i) ? `<span class="tag wait" title="Вопросы ждут вашего ответа">Ждут вас: ${nWait(i)}</span>` : ''}
+      ${nReq(i) ? `<span class="tag req" title="Ваши просьбы, ещё не сделанные">Просьбы: ${nReq(i)}</span>` : ''}
+      ${(i.waits || []).length ? `<span class="tag blocked" title="Заблокирована незавершёнными задачами">⏳ Ждёт ${esc(i.waits.join(', '))}</span>` : ''}
       ${claimTag(i)}
       ${i.status ? `<span class="tag ${esc(i.status)}">${esc(label(i.status))}</span>` : ''}
-      ${i.stale ? '<span class="tag stale" title="файлы новее handoff">устарел</span>' : ''}
+      ${i.stale ? '<span class="tag stale" title="Файлы новее handoff">Устарел</span>' : ''}
       ${remainTag(i)}${pct}
       <span class="sess">${s.n ? `<b>●${s.n}</b> ${agoSpan(s.last)}` : ''}</span>
       ${cardBtn(i)}
@@ -443,6 +443,8 @@ const isLocal = (u) => /^[A-Za-z]:[\\/]/.test(u);
 const fileUrl = (u) => '/f/' + u[0].toUpperCase() + '/' + u.slice(3).split(/[\\/]/).map(encodeURIComponent).join('/');
 const extOf = (u) => (u.split(/[?#]/)[0].match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase();
 const isMd = (u) => /^(md|markdown)$/.test(extOf(u));
+// ссылка «открыть во вкладке»: Markdown — страницей панели с разметкой, остальное — как есть
+const viewUrl = (u) => (isMd(u) ? '/?doc=' + encodeURIComponent(u) : fileUrl(u));
 const INPANEL = new Set(['md', 'markdown', 'html', 'htm', 'txt', 'pdf', 'png', 'jpg', 'jpeg', 'svg', 'gif', 'webp', 'json', 'log',
   'py', 'ps1', 'js', 'mjs', 'cmd', 'sh', 'cs', 'css', 'yml', 'yaml', 'xml', 'bsl']);
 
@@ -455,7 +457,7 @@ function docsHtml(docs) {
   if (!docs || !docs.length) return '';
   return `<span class="docs">${docs.map((d) => {
     const loc = isLocal(d.url), e = extOf(d.url);
-    return `<a href="${esc(loc ? fileUrl(d.url) : d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}"${loc && INPANEL.has(e) ? ` data-doc="${esc(d.url)}"` : ''}><span class="k">${loc ? esc(e || 'файл') : '↗'}</span>${esc(docName(d))}</a>`;
+    return `<a href="${esc(loc ? viewUrl(d.url) : d.url)}" target="_blank" rel="noopener" title="${esc(d.url)}"${loc && INPANEL.has(e) ? ` data-doc="${esc(d.url)}"` : ''}><span class="k">${loc ? esc(e || 'файл') : '↗'}</span>${esc(docName(d))}</a>`;
   }).join('')}</span>`;
 }
 async function renderMd(path, box) {
@@ -473,16 +475,17 @@ async function renderMd(path, box) {
     if (abs.origin === location.origin && abs.pathname.startsWith('/f/') && /\.(md|markdown)$/i.test(abs.pathname)) {
       const parts = abs.pathname.slice(3).split('/').map(decodeURIComponent);
       a.dataset.doc = parts[0] + ':\\' + parts.slice(1).join('\\');
+      a.href = viewUrl(a.dataset.doc) + abs.hash;
     }
   });
 }
 async function openDoc(path) {
   const v = $('#viewer'), body = $('#vbody');
   $('#vtitle').textContent = path.split(/[\\/]/).pop(); $('#vtitle').title = path;
-  $('#vtab').href = isMd(path) ? '/?doc=' + encodeURIComponent(path) : fileUrl(path);
+  $('#vtab').href = viewUrl(path);
   v.hidden = false;
   if (isMd(path)) {
-    body.innerHTML = '<div class="md"><p class="sess">загружаю…</p></div>';
+    body.innerHTML = '<div class="md"><p class="sess">Загружаю…</p></div>';
     try { await renderMd(path, body); body.scrollTop = 0; } catch (err) { body.innerHTML = `<div class="md"><p class="err">Не открылось: ${esc(err.message)}</p></div>`; }
   } else body.innerHTML = `<iframe src="${esc(fileUrl(path))}" title="${esc(path)}"></iframe>`;
 }
@@ -567,24 +570,76 @@ function renderCard(ref) {
     : { key: 'card-none', cls: 'empty', html: `Задача ${esc(ref)} больше не найдена` }];
 }
 
+// keepwarm: общий график (личный поверх общего, его читает keepwarm-gate.js) и настройки сессии под ⚙
+const kwOpen = new Set();
+const hm = (ms) => (ms ? new Date(ms).toTimeString().slice(0, 5) : '');
+const DAYS = [[1, 'пн'], [2, 'вт'], [3, 'ср'], [4, 'чт'], [5, 'пт'], [6, 'сб'], [0, 'вс']];
+function kwGraphRow() {
+  const k = src('keepwarm'), g = k.graph || {}, w = g.startWindow || ['07:00', '11:00'], off = new Set(g.offDays || []);
+  return { key: 'kw-graph', cls: 'row kwg', html: `<div class="kwf" data-kwg>
+    <b title="По нему keepwarm решает, до какого времени держать кэш сессий">График keepwarm</b>
+    <label title="Первый ввод за день в этом окне — день рабочий; вне окна — внеурочно, только один прогрев">Начало дня
+      <input type="time" data-g="from" value="${esc(w[0])}"> – <input type="time" data-g="to" value="${esc(w[1])}"></label>
+    <label>Длится <input type="number" min="1" max="16" step="0.5" data-g="workdayHours" value="${esc(g.workdayHours)}"> ч</label>
+    <span class="kwdays" title="Выходные: весь день внеурочно">${DAYS.map(([n, d]) => `<label><input type="checkbox" data-g="off" value="${n}"${off.has(n) ? ' checked' : ''}>${d}</label>`).join('')}</span>
+    <label title="Сегодня работаем до: день рабочий до этого времени, таймеры по умолчанию тянутся до него">Сегодня до
+      <input type="time" data-g="dayend" value="${esc(hm(k.today?.end))}"></label>
+    <label title="Сессия сама ставит keepwarm до конца рабочего дня по обычным задачам; по обращениям — нет. Выключено — только по просьбе">
+      <input type="checkbox" data-g="autoStart"${g.autoStart === false ? '' : ' checked'}> Ставить самим по обычным задачам (не по обращениям)</label>
+  </div>` };
+}
+function kwSessionForm(s) {
+  const o = (src('keepwarm').sessions || {})[s.sid] || {};
+  const h = o.handoff === true ? 'yes' : o.handoff === false ? 'no' : '';
+  return `<div class="kwf" data-kws="${esc(s.sid)}">
+    <label title="Сколько раз будить молчащую сессию, потом передачка; пусто — пока не выйдет срок">Пробуждений до передачки
+      <input type="number" min="0" max="48" data-k="pings" value="${o.pings || ''}" placeholder="По сроку"></label>
+    <label title="Свой срок вместо срока таймера (конец дня или часы)">Держать до <input type="time" data-k="until" value="${esc(hm(o.until))}"></label>
+    <label>В конце <select data-k="handoff"><option value=""${h ? '' : ' selected'}>Как в таймере</option>
+      <option value="yes"${h === 'yes' ? ' selected' : ''}>Передачка</option><option value="no"${h === 'no' ? ' selected' : ''}>Только снять таймер</option></select></label>
+  </div>`;
+}
+const kwSummary = (sid) => {
+  const o = (src('keepwarm').sessions || {})[sid];
+  if (!o) return '';
+  return [o.pings && `${o.pings} проб.`, o.until && `до ${hm(o.until)}`, o.handoff === false && 'без передачки'].filter(Boolean).join(', ');
+};
+async function kwSave(t) {
+  const f = t.closest('[data-kws],[data-kwg]');
+  if (f.dataset.kws !== undefined) {
+    const v = (k) => f.querySelector(`[data-k="${k}"]`).value;
+    let until = null;
+    if (v('until')) { const [hh, mm] = v('until').split(':').map(Number); until = new Date().setHours(hh, mm, 0, 0); if (until <= Date.now()) until += 86400000; }
+    return post('keepwarm', 'session', { sid: f.dataset.kws, pings: +v('pings') || 0, until, handoff: { yes: true, no: false }[v('handoff')] ?? null });
+  }
+  const g = t.dataset.g, q = (k) => f.querySelector(`[data-g="${k}"]`);
+  if (g === 'dayend') return post('keepwarm', 'dayend', { end: t.value });
+  if (g === 'from' || g === 'to') return post('keepwarm', 'graph', { startWindow: [q('from').value, q('to').value] });
+  if (g === 'workdayHours') return post('keepwarm', 'graph', { workdayHours: +t.value || null });
+  if (g === 'off') return post('keepwarm', 'graph', { offDays: [...f.querySelectorAll('[data-g="off"]:checked')].map((x) => +x.value) });
+  if (g === 'autoStart') return post('keepwarm', 'graph', { autoStart: t.checked });
+}
+
 function renderSessions() {
   const off = new Set(src('keepwarm').off || []);
-  const kw = 'keepwarm' in state.sources;
+  const kw = 'keepwarm' in state.sources && !src('keepwarm').error;
   if (!(src('sessions').list || []).length) return [{ key: 's-none', cls: 'empty', html: 'Сессий нет' }];
-  return (src('sessions').list || []).map((s) => ({
+  return [...(kw ? [kwGraphRow()] : []), ...(src('sessions').list || []).map((s) => [{
     key: 's:' + s.sid,
     cls: 'row' + (s.alive ? '' : ' dead'),
     html: `<div class="head">${s.title ? `<span class="title">${esc(s.title)}</span>` : ''}
       <code class="id copy" data-copy="${esc(s.sid)}" title="${esc(s.sid)} — скопировать">${esc(s.sid.slice(0, 8))}</code>
-      ${s.address && s.address !== s.title ? `<code class="id copy" data-copy="${esc(s.address)}" title="адрес для SendMessage — скопировать">@${esc(s.address)}</code>` : ''}
+      ${s.address && s.address !== s.title ? `<code class="id copy" data-copy="${esc(s.address)}" title="Адрес для SendMessage — скопировать">@${esc(s.address)}</code>` : ''}
       <span class="tag ${s.status === 'busy' ? 'active' : ''}">${esc(label(s.status))}</span>
       <span class="id grow">${esc(s.cwd)}</span>
       <span class="sess">${s.task ? 'задача ' + esc(s.task) : 'без задачи'}</span>
-      <span class="sess">последнее ${agoSpan(s.last)}</span>
-      ${kw && s.alive ? (src('keepwarm').all_off ? '<span class="sess" title="выключен рубильником model в настройках">keepwarm выкл.</span>'
-        : `<label class="sess"><input type="checkbox" data-act="keepwarm" data-sid="${esc(s.sid)}" ${off.has(s.sid) ? '' : 'checked'}> keepwarm</label>`) : ''}
+      <span class="sess">Последнее ${agoSpan(s.last)}</span>
+      ${kw && s.alive ? (src('keepwarm').all_off ? '<span class="sess" title="Выключен рубильником model в настройках">Keepwarm выкл.</span>'
+        : `<label class="sess"><input type="checkbox" data-act="keepwarm" data-sid="${esc(s.sid)}" ${off.has(s.sid) ? '' : 'checked'}> Keepwarm</label>
+          ${kwSummary(s.sid) ? `<span class="tag" title="Свои настройки keepwarm этой сессии">${esc(kwSummary(s.sid))}</span>` : ''}
+          <button class="ibtn" data-act="kwset" data-sid="${esc(s.sid)}" title="Настройки keepwarm этой сессии" aria-expanded="${kwOpen.has(s.sid)}">⚙</button>`) : ''}
     </div>`,
-  }));
+  }, ...(kw && s.alive && kwOpen.has(s.sid) ? [{ key: 'kws:' + s.sid, cls: 'row kwrow', html: kwSessionForm(s) }] : [])]).flat()];   // форма — своей строкой: смена статуса сессии не стирает ввод
 }
 
 // --- доска объявлений сессий (навык session-board): смотреть и писать от лица владельца ---
@@ -601,9 +656,9 @@ function renderBoard() {
     html: `<div class="bf"><label class="sess" title="Доска — общий файл объявлений для сессий: у 1С-проекта своя на каждую ИБ (из .dev.env), без 1С — доска машины (SESSION_BOARD)">Доска
         <select data-act="bsel">${boards.map((x) => `<option value="${esc(x.name)}"${x.name === cur ? ' selected' : ''}>${esc(label(x))}</option>`).join('')}</select></label>
       <input id="btext" type="text" placeholder="Объявление сессиям — от лица «${esc(b.owner || 'владелец')}»">
-      <label class="sess" title="Новое объявление с тем же ключом заменяет ваше прежнее (старое остаётся в истории). Пусто — не заменяет. ib, stop, branch — блокирующие, по умолчанию 2 ч">ключ
+      <label class="sess" title="Новое объявление с тем же ключом заменяет ваше прежнее (старое остаётся в истории). Пусто — не заменяет. ib, stop, branch — блокирующие, по умолчанию 2 ч">Ключ
         <input id="bkey" type="text" value="${esc(b.key || '')}"></label>
-      <label class="sess" title="Через сколько часов объявление уйдёт само">срок <input id="bhours" type="number" min="0" value="${esc(boardForm.hours)}"> ч</label>
+      <label class="sess" title="Через сколько часов объявление уйдёт само">Срок <input id="bhours" type="number" min="0" value="${esc(boardForm.hours)}"> ч</label>
       <button class="btn primary" data-act="bsay" data-mode="new">Объявить</button></div>`,
   }];
   const stLabel = { active: 'действует', replaced: 'заменено', closed: 'снято закрытием', expired: 'истекло' };
@@ -612,10 +667,10 @@ function renderBoard() {
     html: `<div class="head" style="cursor:default"><span class="id">${esc(fmtTime(n.at))}</span><span class="title">${esc(n.tag)}</span>
       ${n.key ? `<span class="tag ${n.blocking ? 'wait' : ''}" title="${n.blocking ? 'блокирующий ключ' : 'ключ: новое с тем же тегом и ключом заменяет это'}">#${esc(n.key)}</span>` : ''}
       <span class="grow" title="${esc(n.text)}" style="white-space:normal">${esc(n.text)}</span>
-      ${hist ? `<span class="tag">${stLabel[n.state] || ''}</span>` : `<span class="sess">до ${esc(fmtTime(n.until))}</span>
-      ${n.key && n.key !== 'close' ? `<button class="ibtn" data-act="bsay" data-mode="edit" data-board="${esc(x.name)}" data-tag="${esc(n.tag)}" data-key="${esc(n.key)}" data-text="${esc(n.text)}" title="изменить: новая строка заменит эту, прежняя останется в истории">✎</button>
-        <button class="ibtn" data-act="bsay" data-mode="delete" data-board="${esc(x.name)}" data-tag="${esc(n.tag)}" data-key="${esc(n.key)}" data-text="${esc(n.text)}" title="снять: заменить истёкшей строкой «снято», прежняя останется в истории">×</button>` : ''}
-      <button class="ibtn" data-act="bsay" data-mode="close" data-board="${esc(x.name)}" data-tag="${esc(n.tag)}" title="закрыть тег «${esc(n.tag)}»: снять все его объявления (close)">⊘</button>`}</div>`,
+      ${hist ? `<span class="tag">${stLabel[n.state] || ''}</span>` : `<span class="sess">До ${esc(fmtTime(n.until))}</span>
+      ${n.key && n.key !== 'close' ? `<button class="ibtn" data-act="bsay" data-mode="edit" data-board="${esc(x.name)}" data-tag="${esc(n.tag)}" data-key="${esc(n.key)}" data-text="${esc(n.text)}" title="Изменить: новая строка заменит эту, прежняя останется в истории">✎</button>
+        <button class="ibtn" data-act="bsay" data-mode="delete" data-board="${esc(x.name)}" data-tag="${esc(n.tag)}" data-key="${esc(n.key)}" data-text="${esc(n.text)}" title="Снять: заменить истёкшей строкой «снято», прежняя останется в истории">×</button>` : ''}
+      <button class="ibtn" data-act="bsay" data-mode="close" data-board="${esc(x.name)}" data-tag="${esc(n.tag)}" title="Закрыть тег «${esc(n.tag)}»: снять все его объявления (close)">⊘</button>`}</div>`,
   });
   for (const x of boards) {
     rows.push({ key: 'bh:' + x.name, cls: 'tabsec', html: `<h2>${esc(label(x))} <span class="cnt">${x.notes.length}</span></h2>` });
@@ -641,7 +696,7 @@ function renderInbox() {
   const withReq = items().filter((i) => nReq(i) && inTab(i));
   const rows = st ? [st.row] : [];
   const drafted = asked.filter(nDraftOf);
-  if (drafted.length > 1) rows.push({ key: 'in-all', cls: 'morep', html: `<button class="btn primary" data-act="submitall">Отправить все (${drafted.reduce((s, i) => s + nDraftOf(i), 0)})</button> <span class="sess">ответы ${drafted.length} задач одной кнопкой</span>` });
+  if (drafted.length > 1) rows.push({ key: 'in-all', cls: 'morep', html: `<button class="btn primary" data-act="submitall">Отправить все (${drafted.reduce((s, i) => s + nDraftOf(i), 0)})</button> <span class="sess">Ответы ${drafted.length} задач одной кнопкой</span>` });
   if (!asked.length) rows.push({ key: 'in-none', cls: 'empty', html: 'Вопросов нет' });
   for (const i of asked) {
     const fk = 'in:' + i.tab + '|' + i.id, open = !fold.has(fk);
@@ -649,7 +704,7 @@ function renderInbox() {
     const n = nWait(i), done = (i.plan || []).filter((p) => p.status === 'wait').length - n;
     rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
-        ${n ? `<span class="tag wait">ждут вас: ${n}</span>` : ''}${done ? `<span class="tag ok">отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
+        ${n ? `<span class="tag wait">Ждут вас: ${n}</span>` : ''}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
         ${open ? `<ul class="plan">${asks}</ul>${submitHtml(i)}` : ''}` });
   }
   // просьбы владельца ждут агента, не его — внизу свёрнутой строкой, чтобы видеть неразобранное
@@ -673,12 +728,12 @@ const KANBAN = [
 ];
 function kcard(i) {
   const ss = stages(i), cur = ss.find((x) => x.st === 'cur'), s = liveSessions(i.id);
-  return `<div class="kcard" data-act="card" data-ref="${esc(i.tab + '|' + i.id)}" data-ctx="task" tabindex="0" role="button" title="открыть карточку">
+  return `<div class="kcard" data-act="card" data-ref="${esc(i.tab + '|' + i.id)}" data-ctx="task" tabindex="0" role="button" title="Открыть карточку">
     <div class="kh">${prioTag(i)}<span class="id">${esc(i.id)}</span>${healthTag(i)}${s.n ? `<b class="live">●${s.n}</b>` : ''}</div>
     <div class="kt">${esc(i.title)}</div>
     ${cur ? `<div class="ks" title="${esc(cur.name)}: сделано ${cur.done} из ${cur.total}">● ${esc(cur.name)} <span class="sess">· этап ${cur.n} из ${cur.of}</span></div>` : i.stage ? `<div class="ks">${md(i.stage, true, i)}</div>` : ''}
     ${i.next ? `<div class="kn">${md(i.next, true, i)}</div>` : ''}
-    <div class="kf">${nWait(i) ? `<span class="tag wait">ждут вас: ${nWait(i)}</span>` : ''}${remainTag(i)}
+    <div class="kf">${nWait(i) ? `<span class="tag wait">Ждут вас: ${nWait(i)}</span>` : ''}${remainTag(i)}
       ${i.percent != null ? `<span class="bar" title="${i.percent}%"><i style="width:${i.percent}%"></i></span>` : ''}</div></div>`;
 }
 function renderKanban() {
@@ -690,7 +745,7 @@ function renderKanban() {
   for (const i of list) cols[KANBAN.findIndex(([, , f]) => f(i))].items.push(i);
   const nDone = items().filter((i) => isClosed(i) && (!st || !st.cur || i.tab === st.cur)).length;
   return [...(st ? [st.row] : []), { key: 'kb', cls: 'kanban', html: cols.map((c) => `<section class="kcol ${c.id}"><h3>${c.title} <span class="cnt">${c.items.length}</span></h3>
-    ${c.items.map(kcard).join('') || '<p class="sess">—</p>'}</section>`).join('') + (nDone ? `<section class="kcol done"><h3>Сделано <span class="cnt">${nDone}</span></h3><p class="sess">закрытые задачи — во вкладке задач, «› закрытые»</p></section>` : '') }];
+    ${c.items.map(kcard).join('') || '<p class="sess">—</p>'}</section>`).join('') + (nDone ? `<section class="kcol done"><h3>Сделано <span class="cnt">${nDone}</span></h3><p class="sess">Закрытые задачи — во вкладке задач, «› закрытые»</p></section>` : '') }];
 }
 
 function views() {
@@ -715,12 +770,12 @@ function renderLimits() {
   }));
   const hhmm = (ms) => new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   const info = [u.ok_at && `обновлено ${hhmm(u.ok_at)}`, u.error && `ошибка ${hhmm(u.error_at)}: ${u.error}`].filter(Boolean).join('\n');
-  if (u.ok_at) rows.push({ key: 'at', html: `<span title="последнее удачное обновление лимитов">${hhmm(u.ok_at)}</span>` });
+  if (u.ok_at) rows.push({ key: 'at', html: `<span title="Последнее удачное обновление лимитов">${hhmm(u.ok_at)}</span>` });
   if (u.error) rows.push({ key: 'err', cls: u.limits ? 'stale' : 'err', html: u.limits ? 'устарело ⚠' : 'лимиты не загрузились' });
   if (info) rows.push({ key: 'info', html: `<button class="ibtn${u.error && !u.limits ? ' bad' : ''}" data-act="info" data-text="${esc(info)}" title="${esc(info)}">i</button>` });
-  rows.push({ key: 'refresh', html: '<button class="ibtn" data-act="refresh" data-source="usage" title="обновить лимиты сейчас">↻</button>' });
+  rows.push({ key: 'refresh', html: '<button class="ibtn" data-act="refresh" data-source="usage" title="Обновить лимиты сейчас">↻</button>' });
   const m = state.model || {};
-  if (m.enabled === false) rows.unshift({ key: 'model', cls: 'lim warning', html: '<b title="model.enabled = false: функции, тратящие токены, выключены">токены: выкл.</b>' });
+  if (m.enabled === false) rows.unshift({ key: 'model', cls: 'lim warning', html: '<b title="model.enabled = false: функции, тратящие токены, выключены">Токены: выкл.</b>' });
   patch($('#limits'), rows);
 }
 
@@ -751,7 +806,7 @@ function render() {
   patch($('#nav'), vs.map((v) => ({
     key: v.id,
     cls: v.card ? 'cardwrap' : '',   // × карточки — своя кнопка рядом, не внутри кнопки вкладки
-    html: `<button class="${v.id === view ? 'on' : ''}${v.card ? ' cardtab' : ''}" data-view="${esc(v.id)}"${v.id === view ? ' aria-current="page"' : ''}>${esc(v.title)}${v.wait ? (v.id === 'inbox' ? ` <b class="wbadge" title="вопросы ждут вашего ответа">${v.wait}</b>` : ' <b class="wdot" title="здесь есть вопросы к вам">•</b>') : ''}</button>${v.card ? `<button class="x" data-act="close" data-ref="${esc(v.card)}" title="закрыть карточку" aria-label="закрыть карточку ${esc(v.title)}">×</button>` : ''}`,
+    html: `<button class="${v.id === view ? 'on' : ''}${v.card ? ' cardtab' : ''}" data-view="${esc(v.id)}"${v.id === view ? ' aria-current="page"' : ''}>${esc(v.title)}${v.wait ? (v.id === 'inbox' ? ` <b class="wbadge" title="Вопросы ждут вашего ответа">${v.wait}</b>` : ' <b class="wdot" title="Здесь есть вопросы к вам">•</b>') : ''}</button>${v.card ? `<button class="x" data-act="close" data-ref="${esc(v.card)}" title="Закрыть карточку" aria-label="Закрыть карточку ${esc(v.title)}">×</button>` : ''}`,
   })));
   const v = vs.find((x) => x.id === view);
   const roots = (src('tabs').tabs || []).map((t) => t.root);   // ошибки корней показывает раздел вкладки
@@ -780,7 +835,7 @@ document.addEventListener('click', async (e) => {
   const t = e.target.closest('[data-view],[data-act],[data-copy]');
   if (!t) return;
   if (t.dataset.view) { go(t.dataset.view); return; }
-  if (t.dataset.copy) { await navigator.clipboard.writeText(t.dataset.copy); toast('скопировано'); return; }
+  if (t.dataset.copy) { await navigator.clipboard.writeText(t.dataset.copy); toast('Скопировано'); return; }
   const a = t.dataset.act;
   if (a === 'fold') {
     e.stopPropagation();
@@ -805,6 +860,8 @@ document.addEventListener('click', async (e) => {
     render();
   } else if (a === 'ctab') {
     ctab[t.dataset.ref] = t.dataset.v; store.set('ctab', ctab); render();
+  } else if (a === 'kwset') {
+    kwOpen.has(t.dataset.sid) ? kwOpen.delete(t.dataset.sid) : kwOpen.add(t.dataset.sid); render();
   } else if (a === 'health') {
     e.stopPropagation(); healthPop(t);
   } else if (a === 'answer') {
@@ -827,7 +884,7 @@ document.addEventListener('click', async (e) => {
     let args;
     if (mode === 'new') {
       const text = $('#btext').value.trim();
-      if (!text) { toast('пустое объявление'); return; }
+      if (!text) { toast('Пустое объявление'); return; }
       boardForm.hours = $('#bhours').value; store.set('boardForm', boardForm);
       args = { mode, board: $('.bf select').value, text, key: $('#bkey').value.trim(), hours: $('#bhours').value };
     } else {
@@ -854,7 +911,7 @@ document.addEventListener('click', async (e) => {
   } else if (a === 'info') {
     toast(t.dataset.text, 6000);
   } else if (a === 'refresh') {
-    await post(t.dataset.source, 'refresh', {}); toast('обновляю…');
+    await post(t.dataset.source, 'refresh', {}); toast('Обновляю…');
   } else if (a === 'release') {
     await post('claims', 'release', { task: t.dataset.task });
   } else if (a === 'select') {
@@ -893,6 +950,7 @@ document.addEventListener('focusout', async (e) => {
 });
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.closest('[data-kws],[data-kwg]')) { try { await kwSave(t); toast('Сохранено'); } catch (err) { toast('Не сохранилось: ' + err.message); } return; }
   if (t.dataset.act === 'reph') {
     const rk = t.dataset.key + '|r';
     drafts[rk] = t.checked ? '' : null;
@@ -976,10 +1034,10 @@ function ctxItems(t) {
 }
 async function ctxPick(b, c) {
   const v = b.dataset.v, m = b.dataset.m;
-  if (m === 'copy') { await navigator.clipboard.writeText(v); toast('скопировано'); }
+  if (m === 'copy') { await navigator.clipboard.writeText(v); toast('Скопировано'); }
   else if (m === 'st') await post('tabs', 'plan', { dir: c.ctx.dataset.dir, index: +c.ctx.dataset.index, status: v });
   else if (m === 'doc') openDoc(v);
-  else if (m === 'tab') open(isMd(v) ? '/?doc=' + encodeURIComponent(v) : fileUrl(v), '_blank', 'noopener');
+  else if (m === 'tab') open(viewUrl(v), '_blank', 'noopener');
   else if (m === 'card') openCard(c.ref);
   else if (m === 'answer') { ctab[c.ref] = 'q'; store.set('ctab', ctab); openCard(c.ref); }
   else if (m === 'prio') await post('tabs', 'field', { dir: c.i.dir, field: 'priority', value: v });
@@ -1007,7 +1065,7 @@ document.addEventListener('contextmenu', (e) => {
 // ⚙ — масштаб, ширина, тема, сброс размеров
 function prefsHtml() {
   const seg = (k, opts) => `<span class="seg">${opts.map(([v, t]) => `<button data-k="${k}" data-v="${v}" class="${String(pref(k) ?? '') === v ? 'on' : ''}">${t}</button>`).join('')}</span>`;
-  return `<div class="prefs"><div><div class="lbl">Масштаб</div><span class="seg"><button data-z="-0.1" aria-label="меньше">A−</button><button data-z="0" title="сбросить">${Math.round(zoom() * 100)}%</button><button data-z="0.1" aria-label="больше">A+</button></span>
+  return `<div class="prefs"><div><div class="lbl">Масштаб</div><span class="seg"><button data-z="-0.1" aria-label="Меньше">A−</button><button data-z="0" title="Сбросить">${Math.round(zoom() * 100)}%</button><button data-z="0.1" aria-label="Больше">A+</button></span>
       <span class="seg">${[1, 1.25, 1.5, 2].map((v) => `<button data-zset="${v}" class="${zoom() === v ? 'on' : ''}">${v * 100}%</button>`).join('')}</span></div>
     ${prefs.scale === undefined && innerWidth > 2600 && devicePixelRatio === 1 ? `<div class="sess">Окно ${innerWidth} px — крупнее? <button class="btn" data-zset="1.5">150 %</button></div>` : ''}
     <div><div class="lbl">Ширина</div>${seg('width', [['center', 'по центру'], ['full', 'во всю']])}</div>

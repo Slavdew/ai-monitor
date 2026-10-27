@@ -1,11 +1,31 @@
 """Keepwarm по сессии: флаг <off_dir>/<sid>.off читает tools/keepwarm/keepwarm-gate.js и гасит пинги.
 
 ALL.off — keepwarm выключен для всех: его ставит рубильник model (enabled / keepwarm = false).
+Настройки, которые читает тот же шлюз (каталог state_dir, по умолчанию %LOCALAPPDATA%/keepwarm):
+  config.json        — личный график поверх общего (src config): окно начала дня, часы, выходные,
+                       autoStart — ставить таймер самому по обычным задачам;
+  day-start          — сегодняшний день {start, end}: «сегодня работаем до»;
+  session/<sid>.json — настройки сессии {pings, until, handoff}.
 """
+import json
 import os
 import re
+import time
 
-from monitor.core import expand, model_on
+from monitor.core import expand, model_on, read_json, write_json
+
+GRAPH_KEYS = ('workdayHours', 'startWindow', 'offDays', 'autoStart')
+
+
+def _dirs(src):
+    state = expand(src.get('state_dir', '%LOCALAPPDATA%/keepwarm'))
+    return state, os.path.join(state, 'session')
+
+
+def _today(state):
+    day = read_json(os.path.join(state, 'day-start'), {}) or {}
+    at = day.get('start') or day.get('end')
+    return day if at and time.localtime(at / 1000)[:3] == time.localtime()[:3] else {}
 
 
 def collect(cfg, src, ctx):
@@ -16,13 +36,28 @@ def collect(cfg, src, ctx):
         os.makedirs(d, exist_ok=True)
         open(flag, 'w').close() if all_off else os.remove(flag)
     off = [f[:-4] for f in os.listdir(d) if f.endswith('.off') and f != 'ALL.off'] if os.path.isdir(d) else []
-    return {'off': sorted(off), 'all_off': all_off}
+    state, sess = _dirs(src)
+    base = read_json(expand(src['config']), {}) or {} if src.get('config') else {}
+    mine = read_json(os.path.join(state, 'config.json'), {}) or {}
+    graph = {'workdayHours': 9, 'startWindow': ['07:00', '11:00'], 'offDays': [6, 0], 'autoStart': True,
+             **{k: base[k] for k in GRAPH_KEYS if k in base}, **{k: mine[k] for k in GRAPH_KEYS if k in mine}}
+    sessions = {}
+    if os.path.isdir(sess):
+        for f in os.listdir(sess):
+            if f.endswith('.json'):
+                sessions[f[:-5]] = read_json(os.path.join(sess, f), {}) or {}
+    return {'off': sorted(off), 'all_off': all_off, 'graph': graph, 'today': _today(state), 'sessions': sessions}
 
 
-def set_keepwarm(cfg, src, args):
+def _sid(args):
     sid = args['sid']
     if not re.fullmatch(r'[\w-]+', sid):
         raise ValueError('sid')
+    return sid
+
+
+def set_keepwarm(cfg, src, args):
+    sid = _sid(args)
     d = expand(src['off_dir'])
     os.makedirs(d, exist_ok=True)
     flag = os.path.join(d, f'{sid}.off')
@@ -34,4 +69,61 @@ def set_keepwarm(cfg, src, args):
     return {'ok': True}
 
 
-ACTIONS = {'set': set_keepwarm}
+def set_session(cfg, src, args):
+    """Настройки сессии: pings (0 — без счёта), until (мс, пусто — по таймеру), handoff (true/false/пусто)."""
+    sid = _sid(args)
+    _, sess = _dirs(src)
+    out = {}
+    if int(args.get('pings') or 0) > 0:
+        out['pings'] = int(args['pings'])
+    if args.get('until'):
+        out['until'] = int(args['until'])
+    if args.get('handoff') in (True, False):
+        out['handoff'] = args['handoff']
+    path = os.path.join(sess, f'{sid}.json')
+    if out:
+        write_json(path, out)
+    elif os.path.exists(path):
+        os.remove(path)
+    return {'ok': True}
+
+
+def set_graph(cfg, src, args):
+    """Личный график: только известные ключи; пустое значение — вернуть общий."""
+    state, _ = _dirs(src)
+    path = os.path.join(state, 'config.json')
+    mine = read_json(path, {}) or {}
+    for k in GRAPH_KEYS:
+        if k in args:
+            if args[k] is None:
+                mine.pop(k, None)
+            else:
+                mine[k] = args[k]
+    write_json(path, mine)
+    return {'ok': True}
+
+
+def set_day_end(cfg, src, args):
+    """«Сегодня работаем до ЧЧ:ММ» — тот же файл, что пишет keepwarm-gate.js --day-end; пусто — снять."""
+    state, _ = _dirs(src)
+    path = os.path.join(state, 'day-start')
+    day = _today(state)
+    hm = args.get('end') or ''
+    if not hm:
+        day.pop('end', None)
+    else:
+        if not re.fullmatch(r'\d\d?:\d\d', hm):
+            raise ValueError('ЧЧ:ММ')
+        h, m = map(int, hm.split(':'))
+        t = time.localtime()
+        end = int(time.mktime((t.tm_year, t.tm_mon, t.tm_mday, h, m, 0, 0, 0, -1)) * 1000)
+        if end <= time.time() * 1000:
+            raise ValueError('время уже прошло')
+        day = {'start': day.get('start') or int(time.time() * 1000), 'end': end}
+    os.makedirs(state, exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(day, f)
+    return {'ok': True}
+
+
+ACTIONS = {'set': set_keepwarm, 'session': set_session, 'graph': set_graph, 'dayend': set_day_end}

@@ -25,8 +25,8 @@
   "plan_mode": "sequential",
   "_ui": "Вид страницы по умолчанию; владелец меняет в ⚙ (запоминает браузер). scale — масштаб (1 = 100 %), width — center|full, max_width — предел ширины при center, split — доля предпросмотра, theme — auto|light|dark, labels — подписи статусов плана",
   "ui": { "scale": 1, "width": "center", "max_width": 1400, "split": 0.38, "theme": "auto",
-          "labels": { "todo": "к работе", "doing": "в работе", "done": "сделано", "skip": "пропуск", "wait": "ждёт вас", "later": "отложено",
-                      "active": "в работе", "paused": "пауза", "busy": "работает", "idle": "ждёт" } },
+          "labels": { "todo": "К работе", "doing": "В работе", "done": "Сделано", "skip": "Пропуск", "wait": "Ждёт вас", "later": "Отложено",
+                      "active": "В работе", "paused": "Пауза", "busy": "Работает", "idle": "Ждёт" } },
 
   "model": {
     "_comment": "Всё, что тратит токены модели. enabled — общий рубильник; выключенное не ломает панель: данные без модели (вкладки, сессии, лимиты) работают всегда.",
@@ -43,7 +43,9 @@
     "sessions": { "enabled": true, "registry": "~/.claude/sessions", "transcripts": "~/.claude/projects",
                   "bind": ["claim", "handoff_session", "cwd"] },
     "usage":    { "enabled": true, "every_sec": 300, "credentials": "~/.claude/.credentials.json" },
-    "keepwarm": { "enabled": true, "off_dir": "%LOCALAPPDATA%/keepwarm/off" },
+    "keepwarm": { "enabled": true, "off_dir": "%LOCALAPPDATA%/keepwarm/off", "state_dir": "%LOCALAPPDATA%/keepwarm",
+                  "config": "../keepwarm/keepwarm.config.json",
+                  "_comment": "config — общий график keepwarm; личный (правится в «Сессиях») — state_dir/config.json поверх него" },
     "board":    { "enabled": true, "dir": "%LOCALAPPDATA%/1c-ib-queue", "skill": "../../skills/session-board",
                   "owner": "владелец", "key": "user", "default": "", "history": 100 }
   }

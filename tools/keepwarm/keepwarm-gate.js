@@ -25,6 +25,10 @@ const DAY_START = path.join(STATE_DIR, 'day-start');   // сегодняшний
 // <sid>.off — keepwarm сессии выключен снаружи (панель task-monitor), ALL.off — у всех: пинги гасятся молча
 const OFF_DIR = process.env.KEEPWARM_OFF_DIR || path.join(STATE_DIR, 'off');
 const CONFIG = process.env.KEEPWARM_CONFIG || path.join(__dirname, 'keepwarm.config.json');
+// личный график поверх CONFIG (правит панель task-monitor) и настройки сессии <sid>.json:
+// { pings — пробуждений до передачки (0 — без счёта), until — срок, мс; handoff — false: без передачки }
+const LOCAL_CONFIG = path.join(STATE_DIR, 'config.json');
+const SESSION_DIR = path.join(STATE_DIR, 'session');
 // имя файла handoff задаёт хук: скиллу не нужен отдельный вызов за временем
 const TASK_DIR = 'каталог "<AI_ROOT>\\tasks\\<номер> <тема>"';
 const DEBUG_DIR = 'каталог "<AI_ROOT>\\tools\\keepwarm\\debug\\{FILE}" (отладка)';
@@ -50,13 +54,15 @@ const fileStamp = (ms) => {
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 };
 
-function config() {
+function readJson(file) {
   try {
-    return JSON.parse(fs.readFileSync(CONFIG, 'utf8'));
+    return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
   } catch (err) {
     return {};
   }
 }
+const config = () => ({ ...readJson(CONFIG), ...readJson(LOCAL_CONFIG) });
+const sessionCfg = (sid) => (sid ? readJson(path.join(SESSION_DIR, `${sid}.json`)) : {});
 
 const minutes = (hm) => { const [h, m] = String(hm).split(':').map(Number); return h * 60 + (m || 0); };
 
@@ -119,7 +125,14 @@ function planOf(prompt, now) {
 }
 
 // --prompt [часы] [true|false]: текст запроса для CronCreate. Без часов внеурочно — «один прогрев».
+// auto — таймер ставит сама сессия по правилам, а не по просьбе: при autoStart: false в графике
+// таймер не нужен (код 2).
 function timerPrompt(args, now) {
+  if (args.includes('auto') && config().autoStart === false) {
+    process.stdout.write('keepwarm: автозапуск выключен в графике — таймер не ставить\n');
+    process.exitCode = 2;
+    return;
+  }
   const hours = args.find((a) => /^\d+([.,]\d+)?$/.test(a));
   const mode = args.includes('false') ? 'без handoff' : 'handoff';
   const day = workday(now);
@@ -228,23 +241,28 @@ function gate(data) {
   }
   const debug = prompt.includes('#debug');
   const wakeMin = debug ? 1 : WAKE_MIN;
-  const plan = planOf(prompt, started);
+  // настройки сессии из панели важнее запроса таймера: свой срок, счёт пробуждений, без передачки
+  const own = sessionCfg(sid);
+  const plan = own.until ? { deadline: Number(own.until) } : planOf(prompt, started);
+  const pings = Number(own.pings) || 0;
   const s = scan(data.transcript_path);
   const idle = (started - s.answerAt) / 60000;   // ответа не нашёл — idle огромный, будим
   let reason = 'сессия активна';
   if (idle >= wakeMin) {
     const once = plan.single || (plan.warmOnce && started >= plan.deadline);
-    if (once ? s.wakes < 1 : started < plan.deadline) {
+    const counted = pings > 0 && s.wakes >= pings;   // пробуждения кончились раньше срока
+    if (!counted && (once ? s.wakes < 1 : started < plan.deadline)) {
       const tail = once ? 'последний прогрев' : `поддержание до ${hhmm(plan.deadline)}`;
       process.stdout.write(PING.replace('{TAIL}', tail));
       return;
     }
     // handoff один раз: последнее пробуждение было до срока; у «одного прогрева» — второе
-    if ((once && s.wakes === 1) || s.wakeAt < plan.deadline) {
+    if (counted ? s.wakes === pings : (once && s.wakes === 1) || s.wakeAt < plan.deadline) {
       let why = 'по окончании поддержания кэша';
       if (plan.single) why = 'из-за долгого простоя';
-      else if (plan.endOfDay) why = 'по окончании рабочего дня';
-      process.stdout.write(prompt.includes('без handoff') ? STOP : HANDOFF
+      else if (plan.endOfDay && !counted) why = 'по окончании рабочего дня';
+      const stop = own.handoff === false || (own.handoff !== true && prompt.includes('без handoff'));
+      process.stdout.write(stop ? STOP : HANDOFF
         .replace('{N}', String(Math.floor(idle)))
         .replace('{DIR}', debug ? DEBUG_DIR : TASK_DIR)
         .replaceAll('{FILE}', fileStamp(started))
