@@ -6,19 +6,39 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 $port = 8770
-try { $port = [int](& python -c "import sys; sys.path.insert(0, r'$here'); from monitor.core import load_config; print(load_config().get('port', 8770))") } catch { }
+# Python — python или py (на машине бывает только одно); pythonw — рядом с найденным python.exe
+$pyw = 'pythonw'
+foreach ($py in 'python', 'py') {
+    try {
+        $out = & $py -c "import sys; sys.path.insert(0, r'$here'); from monitor.core import load_config; print(load_config().get('port', 8770)); print(sys.executable)" 2>$null
+        if ($LASTEXITCODE -eq 0 -and $out) {
+            $port = [int]$out[0]
+            $w = Join-Path (Split-Path $out[1]) 'pythonw.exe'
+            if (Test-Path $w) { $pyw = $w }
+            break
+        }
+    } catch { }
+}
 $url = "http://127.0.0.1:$port/"
 
 $created = $false
 $mutex = New-Object System.Threading.Mutex($true, 'Local\claude-task-monitor-tray', [ref]$created)
 if (-not $created) { if ($Open) { Start-Process $url }; return }
 
-function Get-ServerPid {
+function Get-PortPid {
     $c = Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($c) { $c.OwningProcess } else { $null }
 }
+# свой сервер — процесс на порту, запущенный с server.py этой панели; чужую программу на порту не трогаем
+function Get-ServerPid {
+    $p = Get-PortPid
+    if (-not $p) { return $null }
+    $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId=$p" -ErrorAction SilentlyContinue).CommandLine
+    if ($cmd -match 'server\.py') { $p } else { $null }
+}
 function Start-Server {
-    if (-not (Get-ServerPid)) { Start-Process pythonw -ArgumentList 'server.py' -WorkingDirectory $here -WindowStyle Hidden }
+    if (Get-PortPid) { return }   # порт занят: свой сервер уже работает или чужая программа — не запускаем второй
+    Start-Process $pyw -ArgumentList 'server.py' -WorkingDirectory $here -WindowStyle Hidden
 }
 function Stop-Server {
     $p = Get-ServerPid
@@ -54,7 +74,7 @@ $tray.ContextMenuStrip = $menu
 function Update-State {
     $alive = [bool](Get-ServerPid)
     $tray.Icon = if ($alive) { $iconOn } else { $iconOff }
-    $tray.Text = if ($alive) { "Панель задач — $url" } else { 'Панель задач — сервер остановлен' }
+    $tray.Text = if ($alive) { "Панель задач — $url" } elseif (Get-PortPid) { "Порт $port занят другой программой" } else { 'Панель задач — сервер остановлен' }
 }
 $miOpen.add_Click({ Start-Server; Start-Process $url })
 $tray.add_MouseClick({ param($s, $e) if ($e.Button -eq 'Left') { Start-Server; Start-Process $url } })
