@@ -880,7 +880,9 @@ function renderBoard() {
 
 // «Ждут вас»: всё неразобранное владельцем — вопросы и его просьбы всех задач, ответ на месте
 const items = () => src('tabs').items || [];
-const pending = () => items().filter((i) => (i.plan || []).some((p) => p.status === 'wait') || nReq(i) || nAct(i));
+// ответы агента на вопросы владельца (task.json qa) — до «Прочитано»; прочитанные — в архиве под разделом
+const nQa = (i) => (i.qa || []).filter((e) => !e.read).length;
+const pending = () => items().filter((i) => (i.plan || []).some((p) => p.status === 'wait') || nReq(i) || nAct(i) || nQa(i));
 function renderInbox() {
   const all = src('tabs').tabs || [];
   const isAsked = (i) => (i.plan || []).some((p) => p.status === 'wait' && !p.act);
@@ -903,6 +905,20 @@ function renderInbox() {
     rows.push({ key: 'act:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
         ${nAct(i) ? `<span class="tag wait">Действия: ${nAct(i)}</span>` : ''}${cardBtn(i)}</div>${open ? `<ul class="plan">${acts}</ul>${submitHtml(i)}` : ''}` });
+  }
+  const answered = items().filter((i) => nQa(i) && inSub(i));
+  if (answered.length) rows.push(sec('ib:qa', 'Ответы на ваши вопросы', answered.reduce((s, i) => s + nQa(i), 0)));
+  const sess = (sid) => { const s = (src('sessions').list || []).find((x) => x.sid === sid); return s ? (s.title || s.address) : ''; };
+  const qaRow = (i, e, k) => `<li class="qa${e.read ? ' read' : ''}"><div class="qaq"><span class="lbl">Вы</span> ${esc(e.q)}</div>
+    <div class="qaa"><span class="lbl">Ответ</span> ${md(e.a, true, i)}</div>
+    <div class="sess">${hhmm(e.at)}${e.item ? ` · к пункту ${e.item}` : ''}${e.by && sess(e.by) ? ` · ${esc(sess(e.by))}` : ''}
+    ${e.read ? '' : `<button class="btn sm" data-act="qaread" data-dir="${esc(i.dir)}" data-index="${k}">Прочитано</button>`}</div></li>`;
+  for (const i of fold.has('ib:qa') ? [] : answered) {
+    const hk = 'qaarch:' + i.dir, arch = (i.qa || []).filter((e) => e.read).length;
+    rows.push({ key: 'qa:' + i.tab + ':' + i.id, cls: 'row card inbox', html: `<div class="dhead"><span class="id">${esc(i.id)}</span><span class="title grow">${esc(i.title)}</span>
+      ${nQa(i) > 1 ? `<button class="btn sm" data-act="qaread" data-all="1" data-dir="${esc(i.dir)}">Прочитано все</button>` : ''}${cardBtn(i)}</div>
+      <ul class="plan">${(i.qa || []).map((e, k) => (e.read ? '' : qaRow(i, e, k))).join('')}</ul>
+      ${arch ? `<p class="morep">${moreRow(hk, arch, 'прочитанные')}</p>${shown.has(hk) ? `<ul class="plan">${(i.qa || []).map((e, k) => (e.read ? qaRow(i, e, k) : '')).join('')}</ul>` : ''}` : ''}` });
   }
   rows.push(sec('ib:qs', 'Вопросы', asked.reduce((s, i) => s + nWait(i), 0)));
   const qOpen = !fold.has('ib:qs');
@@ -1169,6 +1185,8 @@ document.addEventListener('click', async (e) => {
     else if (op === 'del') { if (!confirm(`Удалить настройку ${n + 1}?`)) return; rs.splice(n, 1); }
     else { const m = op === 'up' ? n - 1 : n + 1; [rs[n], rs[m]] = [rs[m], rs[n]]; }
     await post('keepwarm', 'graph', { rules: rs });
+  } else if (a === 'qaread') {
+    await post('tabs', 'qaread', { dir: t.dataset.dir, index: +t.dataset.index, all: !!t.dataset.all });
   } else if (a === 'free') {
     await post('claims', 'free', { res: t.dataset.res });
   } else if (a === 'select') {

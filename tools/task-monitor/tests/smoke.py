@@ -107,6 +107,16 @@ try:
     except urllib.error.HTTPError as e:
         check('free без Origin → 403', e.code == 403, e.code)
     check('владелец снимает захват', post('claims', 'free', {'res': 'стенд'}).get('ok') is True)
+    # журнал «вопрос — ответ»: запись агентом, к закрытому вопросу, «Прочитано» — только со страницы
+    check('qa: запись', tm('qa', 'a1', 'Что за файл?', 'Инструмент проверки окна', '--item', '4')[1] == 'ok ответ 1')
+    try:
+        op.open(urllib.request.Request(f'{base}/api/tabs/qaread', json.dumps({'dir': d, 'index': 0}).encode()))
+        check('qaread без Origin → 403', False)
+    except urllib.error.HTTPError as e:
+        check('qaread без Origin → 403', e.code == 403, e.code)
+    post('tabs', 'qaread', {'dir': d, 'index': 0})
+    q0 = json.load(open(os.path.join(d, 'task.json'), encoding='utf-8'))['qa'][0]
+    check('qa: прочитано, к пункту 4', q0['read'] is True and q0['item'] == 4, q0)
     # действие — вопрос вида act: вариант «Сделал» и свой текст, отправка той же кнопкой
     post('tabs', 'draft', {'dir': d, 'n': 6, 'opt': 'Сделал'})
     post('tabs', 'draft', {'dir': d, 'n': 6, 'text': 'готово'})

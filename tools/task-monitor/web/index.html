@@ -250,6 +250,9 @@ th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
 /* вопросы владельцу */
 .tag.wait { color:var(--warn); border-color:var(--warn) }
 /* ожидаемое действие: команда — отдельной строкой для копирования, кнопки — рядом */
+/* ответы на вопросы владельца: вопрос серым, ответ основным цветом */
+li.qa { display:block; padding:6px 0 } li.qa.read { opacity:.7 } .qaq { color:var(--mute) } .qaa { margin:2px 0 }
+li.qa .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--acc); margin-right:6px }
 .actcmd { display:block; margin:6px 0 } .actcmd .lbl { color:var(--warn); font-weight:600; margin-right:6px }
 /* после «Зафиксировать»: куда написать, чтобы агент увидел ответы */
 .agenthint { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; margin:8px 0 2px; padding:8px 10px; border-radius:8px; background:var(--soft); font-size:13px }

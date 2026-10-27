@@ -20,6 +20,8 @@
     "max_depth": 3,
     "skip_dirs": [".git", ".handoff", "node_modules", "bin", "obj", "__pycache__"]
   },
+  "_qa": "журнал «вопрос — ответ»: false — task.py qa молчит, раздел скрыт (экономия токенов у коллег)",
+  "qa": { "enabled": true },
   "plan_statuses": ["todo", "doing", "done", "skip", "wait", "later"],
   "plan_mode": "sequential",
   "_ui": "Вид страницы по умолчанию; владелец меняет в ⚙ (запоминает браузер). scale — масштаб (1 = 100 %), width — center|full, max_width — предел ширины при center, split — доля предпросмотра, theme — auto|light|dark, labels — подписи статусов плана",

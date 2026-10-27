@@ -130,6 +130,7 @@ def read_item(dir_, tab, cfg):
         'plan': plan,
         'percent': round(100 * done / sum(weights)) if weights else None,
         'links': task.get('links', {}),
+        'qa': task.get('qa', []),   # ответы агента на вопросы владельца: {q, a, at, by, item, read}
         'docs': _docs(dir_, task, it),
         'status': hmeta.get('status') or task.get('status') or '',
         'next': hmeta.get('next') or task.get('next', ''),
@@ -531,6 +532,41 @@ def attach_path(cfg, dir_, name):
         path, k = os.path.join(d, f'{stem} ({k}){ext}'), k + 1
     return path
 
+
+# --- журнал «вопрос — ответ»: ответы агента на вопросы владельца, заданные посреди работы или внутри ответа на вопрос
+# агента (тогда item — номер того вопроса, он не открывается заново). Остаётся, пока владелец не отметит «Прочитано».
+
+def qa_add(cfg, dir_, q, a, item=None, by=''):
+    if not cfg.get('qa', {}).get('enabled', True):
+        return None
+    q, a = ' '.join(str(q).split()), str(a).strip()
+    if not q or not a:
+        raise ValueError('нужны вопрос и ответ')
+    entry = {'q': q[:500], 'a': a[:2000], 'at': int(time.time() * 1000), 'read': False,
+             **({'by': by} if by else {}), **({'item': int(item)} if item else {})}
+    out = {}
+
+    def fn(t):
+        if item:
+            n = int(item)
+            if not 1 <= n <= len(t.get('plan', [])):
+                raise ValueError(f'нет пункта {n}')
+        t.setdefault('qa', []).append(entry)
+        out['n'] = len(t['qa'])
+    update_task(cfg, dir_, fn)
+    return out['n']
+
+
+def qa_read(cfg, args):
+    """Владелец отметил ответ прочитанным (со страницы): index — с 0; all — все непрочитанные задачи."""
+    def fn(t):
+        qa = t.get('qa', [])
+        for k, e in enumerate(qa):
+            if args.get('all') or k == int(args.get('index', -1)):
+                e['read'] = True
+    update_task(cfg, args['dir'], fn)
+    return {'ok': True}
+
 ACTIONS = {'after': lambda cfg, src, a: set_after(cfg, a), 'plan': lambda cfg, src, a: set_plan(cfg, a), 'field': lambda cfg, src, a: set_field(cfg, a),
            'draft': lambda cfg, src, a: _questions().draft(cfg, a), 'submit': lambda cfg, src, a: _questions().submit(cfg, a),
-           'request': lambda cfg, src, a: _questions().request(cfg, a), 'create': lambda cfg, src, a: create(cfg, a)}
+           'request': lambda cfg, src, a: _questions().request(cfg, a), 'create': lambda cfg, src, a: create(cfg, a), 'qaread': lambda cfg, src, a: qa_read(cfg, a)}

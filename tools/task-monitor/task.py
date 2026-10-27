@@ -13,6 +13,7 @@
   unseen [--mine]                       неподтверждённые ответы с готовыми командами
   next [--tab T] [--project P] | take T | release [T]  взять первую свободную / эту / отпустить
   hold <ресурс> "зачем" [--ttl 20m] | free [ресурс] | held     захват ИБ, стенда, ветки (help hold)
+  qa T "вопрос владельца" "ответ в 1–3 строки" [--item N]   ответ на его вопрос — в «Ждут вас» до «Прочитано»
   api [источник действие ключ=…] | stats [--days 7] | hook | watch [--task T] | modules
 
 Ответ: ok / ok пункт N; ошибка — одна строка «ошибка: …», код 1. Сессия — TASK_SESSION, --sid или
@@ -182,6 +183,7 @@ def parser():
     hd.add_argument('--task'); hd.add_argument('--force', action='store_true')
     fr = sp('free'); fr.add_argument('res', nargs='?')
     sp('held')
+    qa = sp('qa'); qa.add_argument('ref'); qa.add_argument('q'); qa.add_argument('a'); qa.add_argument('--item', type=int)
     # прежние формы — синонимы set (ими пользуются живые сессии)
     pl = sp('plan'); pl.add_argument('ref'); pl.add_argument('n'); pl.add_argument('status')
     nt = sp('note'); nt.add_argument('ref'); nt.add_argument('n'); nt.add_argument('text')
@@ -619,6 +621,9 @@ def run(cfg, a):
         if not in_tab_root(cfg, d):   # задача есть, но панель и команды по id её не увидят
             roots = '; '.join(x['root'] for x in cfg.get('tabs', []))
             print(f'предупреждение: {d} вне корней вкладок — в панели её не будет; заводить внутри: {roots}')
+    elif a.cmd == 'qa':   # ответ на вопрос владельца — в журнал «вопрос — ответ» задачи (раздел «Ждут вас»)
+        n = tabs.qa_add(cfg, resolve(cfg, a.ref), a.q, a.a, a.item, session_id() or '')
+        print(f'ok ответ {n}' if n else 'журнал «вопрос — ответ» выключен (qa.enabled) — не записано')
     elif a.cmd in ('hold', 'free', 'held'):
         res_cmd(cfg, a)
     elif a.cmd in ('next', 'release', 'take'):
