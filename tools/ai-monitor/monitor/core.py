@@ -105,18 +105,36 @@ def write_json(path, data):
             os.remove(tmp)
 
 
-PERSONAL = '%LOCALAPPDATA%/claude-task-monitor/settings.json'
+PERSONAL = '%LOCALAPPDATA%/ai-monitor/settings.json'
+
+
+def _migrate_state():
+    """Переименование 28.10: состояние task-monitor (%LOCALAPPDATA%/claude-task-monitor — ответы, захваты, личные
+    настройки) копируется в %LOCALAPPDATA%/ai-monitor один раз; прежний каталог остаётся как резервная копия."""
+    import shutil
+    old, new = expand('%LOCALAPPDATA%/claude-task-monitor'), expand('%LOCALAPPDATA%/ai-monitor')
+    mark = os.path.join(new, '.migrated-from-task-monitor')
+    if not os.path.isdir(old) or os.path.exists(mark) or os.path.exists(os.path.join(new, 'answers.json')):
+        return
+    os.makedirs(new, exist_ok=True)
+    for name in os.listdir(old):
+        src, dst = os.path.join(old, name), os.path.join(new, name)
+        if not os.path.exists(dst):
+            (shutil.copytree if os.path.isdir(src) else shutil.copy2)(src, dst)
+    open(mark, 'w').close()
 
 
 def load_config():
     """config.default.json, поверх — личный файл (A7): ссылка из config.local.json (вне git), иначе
-    TASK_MONITOR_SETTINGS, иначе %LOCALAPPDATA%/claude-task-monitor/settings.json, если он есть."""
+    AI_MONITOR_SETTINGS (прежнее TASK_MONITOR_SETTINGS), иначе %LOCALAPPDATA%/ai-monitor/settings.json, если он есть."""
     cfg = read_json(os.path.join(HOME, 'config.default.json'), {})
     local = read_json(os.path.join(HOME, 'config.local.json'), {})
     tabs_base = HOME   # относительные корни — от файла, где вкладки объявлены
-    path = local.get('settings') or os.environ.get('TASK_MONITOR_SETTINGS') or ''
-    if not path and os.path.exists(expand(PERSONAL)):
-        path = PERSONAL
+    path = local.get('settings') or os.environ.get('AI_MONITOR_SETTINGS') or os.environ.get('TASK_MONITOR_SETTINGS') or ''
+    if not path:   # только для настроек по умолчанию: тесты и копии со своими настройками не трогают живое состояние
+        _migrate_state()
+        if os.path.exists(expand(PERSONAL)):
+            path = PERSONAL
     if path:
         path = expand(path)
         personal = read_json(path, {})
@@ -125,7 +143,7 @@ def load_config():
             tabs_base = os.path.dirname(path)
     for tab in cfg.get('tabs', []):
         tab['root'] = expand(tab['root'], tabs_base)
-    cfg['state_dir'] = expand(cfg.get('state_dir', '%LOCALAPPDATA%/claude-task-monitor'))
+    cfg['state_dir'] = expand(cfg.get('state_dir', '%LOCALAPPDATA%/ai-monitor'))
     return cfg
 
 

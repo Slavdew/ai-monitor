@@ -1,7 +1,7 @@
-# task-monitor — прототип панели задач
+# ai-monitor — панель задач для агентов Claude Code
 
-Замысел и разбор — в каталоге задачи task-monitor (`PLAN.md`, `ANALYSIS.md`, `reviews/`); задачи ведутся вне
-репозиториев, у владельца — `<tasks_root>\task-monitor`. Запуск: `start.cmd` или
+Замысел и разбор — в каталоге задачи ai-monitor (`PLAN.md`, `ANALYSIS.md`, `reviews/`); задачи ведутся вне
+репозиториев, у владельца — `<tasks_root>\ai-monitor`. Запуск: `start.cmd` или
 `python server.py` → http://127.0.0.1:8770. Python 3.12 stdlib, Node — только для хука keepwarm.
 
 ## Устройство
@@ -51,7 +51,7 @@
 
 ## Установка на машину
 
-`py install.py [--board home] [--clean <settings.json проекта>]` — копирует навыки task-monitor,
+`py install.py [--board home] [--clean <settings.json проекта>]` — копирует навыки ai-monitor,
 session-board, handoff в `~/.claude/skills`, добавляет в `~/.claude/settings.json` хуки
 UserPromptSubmit (`task.py hook`, `session-board.js`), разрешение на `task.py` и `SESSION_BOARD`
 (доска машины без `.dev.env`). Повторный запуск безопасен.
@@ -94,7 +94,7 @@ done` (подтвердить и закрыть; пункт без ответа 
   запущенный сервер (как кнопка страницы); без аргументов — список действий. `n=` — номер пункта с 1
   (`index` — с 0, как у страницы); значения — строки, JSON только явный (`null true false […] {…}`).
 - `node ui.mjs шаг …` — безголовый Edge/Chrome по CDP: `view:`, `card:`, `click:`, `type:`, `text:`,
-  `count:`, `eval:`, `shot:`; строка вывода на шаг, снимки в `%TEMP%\task-monitor-ui`. Профиль
+  `count:`, `eval:`, `shot:`; строка вывода на шаг, снимки в `%TEMP%\ai-monitor-ui`. Профиль
   браузера — свой на запуск, по завершении закрывается и удаляется.
 
 ## Запуск, вкладки, документы
@@ -132,4 +132,4 @@ done` (подтвердить и закрыть; пункт без ответа 
 (Fable и т. п.) в документированных данных нет — панель его не показывает.
 
 Ещё не сделано: токены по задачам (token-log), отсечка по лимиту (идея `usage-guard`),
-обёртка `tm` вместо полного пути к `task.py`.
+обёртка `am` вместо полного пути к `task.py`.

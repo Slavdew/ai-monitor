@@ -22,7 +22,7 @@ foreach ($py in 'python', 'py') {
 $url = "http://127.0.0.1:$port/"
 
 $created = $false
-$mutex = New-Object System.Threading.Mutex($true, 'Local\claude-task-monitor-tray', [ref]$created)
+$mutex = New-Object System.Threading.Mutex($true, 'Local\ai-monitor-tray', [ref]$created)
 if (-not $created) { if ($Open) { Start-Process $url }; return }
 
 function Get-PortPid {

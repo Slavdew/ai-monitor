@@ -136,8 +136,8 @@ def help_text(topic):
     if not topic:
         return __doc__.strip()
     if topic == 'agent':
-        for p in (os.path.join(HERE, '..', '..', 'skills', 'task-monitor', 'SKILL.md'),
-                  os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'task-monitor', 'SKILL.md')):
+        for p in (os.path.join(HERE, '..', '..', 'skills', 'ai-monitor', 'SKILL.md'),
+                  os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'ai-monitor', 'SKILL.md')):
             if os.path.exists(p):
                 with open(p, encoding='utf-8') as f:
                     text = re.sub(r'\A---\n.*?\n---\n', '', f.read(), flags=re.S)

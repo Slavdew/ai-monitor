@@ -4,7 +4,7 @@
   "project": "Инструменты",
   "plan": [],
   "links": {
-    "parent": "task-monitor",
+    "parent": "ai-monitor",
     "related": [
       "usage-guard"
     ]

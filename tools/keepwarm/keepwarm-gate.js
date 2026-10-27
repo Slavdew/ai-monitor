@@ -22,10 +22,10 @@ const TAIL = 4 << 20;       // хвост журнала, байт; ход дл�
 const PREFIX = 'keepwarm:';
 const STATE_DIR = path.join(process.env.LOCALAPPDATA || '', 'keepwarm');
 const DAY_START = path.join(STATE_DIR, 'day-start');   // сегодняшний день: начало, конец от пользователя
-// <sid>.off — keepwarm сессии выключен снаружи (панель task-monitor), ALL.off — у всех: пинги гасятся молча
+// <sid>.off — keepwarm сессии выключен снаружи (панель ai-monitor), ALL.off — у всех: пинги гасятся молча
 const OFF_DIR = process.env.KEEPWARM_OFF_DIR || path.join(STATE_DIR, 'off');
 const CONFIG = process.env.KEEPWARM_CONFIG || path.join(__dirname, 'keepwarm.config.json');
-// личный график поверх CONFIG (правит панель task-monitor) и настройки сессии <sid>.json:
+// личный график поверх CONFIG (правит панель ai-monitor) и настройки сессии <sid>.json:
 // { pings — пробуждений до передачки (0 — без счёта), until — срок, мс; handoff — false: без передачки }
 const LOCAL_CONFIG = path.join(STATE_DIR, 'config.json');
 const SESSION_DIR = path.join(STATE_DIR, 'session');

@@ -15,8 +15,8 @@ json.dump({'port': port, 'state_dir': os.path.join(tmp, 'state'),
            'sources': {'usage': {'enabled': False}, 'sessions': {'enabled': False}, 'keepwarm': {'enabled': False},
                        'board': {'dir': os.path.join(tmp, 'board')}}}, open(settings, 'w'))
 env = {**os.environ, 'PYTHONIOENCODING': 'utf-8', 'TASK_SESSION': 'smoke-sid'}
-# личный файл — из TASK_MONITOR_SETTINGS (в копии нет config.local.json)
-env['TASK_MONITOR_SETTINGS'] = settings
+# личный файл — из AI_MONITOR_SETTINGS (в копии нет config.local.json)
+env['AI_MONITOR_SETTINGS'] = settings
 fails = []
 
 

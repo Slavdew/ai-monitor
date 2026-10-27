@@ -31,6 +31,12 @@ def _words(s):
     return {w for w in re.findall(r'\w+', (s or '').lower()) if len(w) > 2}
 
 
+
+def _pending(cfg):
+    """answers.json: записи не того вида (испорчен руками или старым ядром) пропускаются — хук не падает на каждом вводе."""
+    data = read_json(_pending_path(cfg), {}) or {}
+    return {k: v for k, v in data.items() if isinstance(v, dict)} if isinstance(data, dict) else {}
+
 def ask(cfg, dir_, text, note='', force=False, opts=(), extra=None):
     """Новый вопрос в план задачи. Похожий открытый вопрос (≥ 0,6 общих слов) — отказ: дополнить его.
     opts — 2–4 коротких варианта ответа (кнопки на странице); «↺ проще» и «Как советуешь» страница добавляет сама."""
@@ -110,7 +116,7 @@ def submit(cfg, args):
         # остались и отправка повторится; иначе ответ ушёл бы в task.json, а агент о нём не узнал (аудит 27.10)
         tid = t.get('id') or os.path.basename(args['dir'])
         with locked(_pending_path(cfg)):
-            pending = read_json(_pending_path(cfg), {}) or {}
+            pending = _pending(cfg)
             for k, p in sent:
                 stamps = [a['at'] for a in p.get('answers', [])] + ([p['rephrase']['at']] if p.get('rephrase') else [])
                 pending[f'{tid}#{k + 1}'] = {'dir': args['dir'], 'n': k + 1, 'q': p['text'],
@@ -143,7 +149,7 @@ def request(cfg, args):
         out['n'] = len(plan)
         out['tid'] = t.get('id') or os.path.basename(args['dir'])
         with locked(_pending_path(cfg)):   # до записи задачи, как в submit: не записалось — просьбы нет нигде
-            pending = read_json(_pending_path(cfg), {}) or {}
+            pending = _pending(cfg)
             pending[f'{out["tid"]}#{out["n"]}'] = {'dir': args['dir'], 'n': out['n'], 'q': text, 'answers': [], 'kind': 'req', 'at': at}
             write_json(_pending_path(cfg), pending)
     tabs.update_task(cfg, args['dir'], fn)
@@ -178,7 +184,7 @@ def ack(cfg, dir_, nums, done=False):
     task = tabs.update_task(cfg, dir_, fn)
     tid = task.get('id') or os.path.basename(dir_)
     with locked(_pending_path(cfg)):
-        pending = read_json(_pending_path(cfg), {}) or {}
+        pending = _pending(cfg)
         for n in nums:
             pending.pop(f'{tid}#{n}', None)
         write_json(_pending_path(cfg), pending)
@@ -231,7 +237,7 @@ def _mine(cfg, sid, cwd):
 def unseen(cfg, sid=None, cwd='', mine=False):
     """Неподтверждённые ответы строками с готовыми командами. mine — только задачи сессии sid,
     остальные — одной строкой."""
-    pending = read_json(_pending_path(cfg), {}) or {}
+    pending = _pending(cfg)
     test = _mine(cfg, sid, cwd) if mine and sid else None
     out, other = [], 0
     for key, r in sorted(pending.items()):
@@ -250,7 +256,7 @@ REMIND_EVERY, REMIND_MS = 5, 600000   # напоминание о неподтв
 def hook(cfg, sid, cwd=''):
     """Строки для хука UserPromptSubmit: полный текст ответа задач этой сессии — один раз; напоминание
     о неподтверждённых и счёт ответов чужих задач — не чаще REMIND_EVERY вводов / REMIND_MS."""
-    pending = read_json(_pending_path(cfg), {}) or {}
+    pending = _pending(cfg)
     if not pending:
         return []
     path = _seen_path(cfg, sid)

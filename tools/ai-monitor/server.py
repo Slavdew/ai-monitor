@@ -269,7 +269,7 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     hub.start()
     port = hub.cfg.get('port', 8765)
-    print(f'task-monitor: http://127.0.0.1:{port}', flush=True)
+    print(f'ai-monitor: http://127.0.0.1:{port}', flush=True)
     ThreadingHTTPServer.allow_reuse_address = False   # на Windows иначе молча делит порт с чужим сервером
     try:
         ThreadingHTTPServer(('127.0.0.1', port), Handler).serve_forever()

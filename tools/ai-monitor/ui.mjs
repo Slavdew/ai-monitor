@@ -25,7 +25,7 @@ import path from 'node:path';
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(k); return i < 0 ? d : argv.splice(i, 2)[1]; };
 const url = opt('--url', 'http://127.0.0.1:8770/');
-const out = opt('--out', path.join(os.tmpdir(), 'task-monitor-ui'));
+const out = opt('--out', path.join(os.tmpdir(), 'ai-monitor-ui'));
 const [w, h] = opt('--size', '1400x1000').split('x');
 const steps = argv;
 if (!steps.length) { console.log(fs.readFileSync(new URL(import.meta.url), 'utf8').split('\nimport')[0]); process.exit(0); }
