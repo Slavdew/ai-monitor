@@ -218,8 +218,14 @@ function planRow(i, p, k, full, answer = full) {
   return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length;
-const submitHtml = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Отправить Claude (${nDraftOf(i)})</button>
+const submitInner = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Отправить Claude (${nDraftOf(i)})</button>
       <span class="sess">Черновики видны только вам, пока не отправлены</span></p>` : '');
+// контейнер есть всегда: пока фокус в поле ответа, render отложен — кнопку обновляет refreshSubmit на месте
+const submitHtml = (i) => `<div class="qsubmit" data-dir="${esc(i.dir)}">${submitInner(i)}</div>`;
+function refreshSubmit(dir) {
+  const i = items().find((x) => x.dir === dir);
+  if (i) document.querySelectorAll(`.qsubmit[data-dir="${CSS.escape(dir)}"]`).forEach((el) => { el.innerHTML = submitInner(i); });
+}
 const copyBtn = (text, what) => `<button class="btn" data-copy="${esc(text)}" title="${esc(text)}">⧉ ${what}</button>`;
 
 // Markdown в тексте задачи: полный — цель, описание, заметки; строчный — «Дальше», пункты, вопросы.
@@ -621,7 +627,7 @@ const DAYS = [[1, 'пн'], [2, 'вт'], [3, 'ср'], [4, 'чт'], [5, 'пт'], [
 function kwGraphRow() {
   const k = src('keepwarm'), g = k.graph || {}, w = g.startWindow || ['07:00', '11:00'], off = new Set(g.offDays || []);
   return { key: 'kw-graph', cls: 'row kwg', html: `<div class="kwf" data-kwg>
-    <b title="По нему keepwarm решает, до какого времени держать кэш сессий">График keepwarm</b>
+    <b title="По нему keepwarm решает, до какого времени держать кэш сессий">График</b>
     <label title="Первый ввод за день в этом окне — день рабочий; вне окна — внеурочно, только один прогрев">Начало дня
       <input type="time" data-g="from" value="${esc(w[0])}"> – <input type="time" data-g="to" value="${esc(w[1])}"></label>
     <label>Длится <input type="number" min="1" max="16" step="0.5" data-g="workdayHours" value="${esc(g.workdayHours)}"> ч</label>
@@ -668,7 +674,10 @@ function renderSessions() {
   const off = new Set(src('keepwarm').off || []);
   const kw = 'keepwarm' in state.sources && !src('keepwarm').error;
   if (!(src('sessions').list || []).length) return [{ key: 's-none', cls: 'empty', html: 'Сессий нет' }];
-  return [...(kw ? [kwGraphRow()] : []), ...(src('sessions').list || []).map((s) => [{
+  // настройки keepwarm — своим разделом с подписью и другим фоном: иначе сливаются с плашками сессий
+  const head = (key, text) => ({ key, cls: 'tabsec static', html: `<h2>${text}</h2>` });
+  const n = (src('sessions').list || []).length;
+  return [...(kw ? [head('kw-h', 'Keepwarm — поддержание кэша сессий'), kwGraphRow(), head('s-h', `Сессии <span class="cnt">${n}</span>`)] : []), ...(src('sessions').list || []).map((s) => [{
     key: 's:' + s.sid,
     cls: 'row' + (s.alive ? '' : ' dead'),
     html: `<div class="head">${s.title ? `<span class="title">${esc(s.title)}</span>` : ''}
@@ -983,6 +992,7 @@ document.addEventListener('click', async (e) => {
     t.closest('.qopts')?.querySelectorAll('.qopt').forEach((b) => { const on = b === t && !!v; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
     const ta = document.querySelector(`textarea[data-key="${CSS.escape(t.dataset.key)}"]`);
     t.closest('li.q')?.classList.toggle('drafted', !!v || !!ta?.value.trim());
+    refreshSubmit(t.dataset.dir);   // кнопка «Отправить Claude» — сразу, не дожидаясь ухода из поля
     await post('tabs', 'draft', { dir: t.dataset.dir, index: +t.dataset.index, opt: v, rephrase: null });
     render();
     ta?.focus();
@@ -1101,6 +1111,7 @@ document.addEventListener('input', (e) => {
   drafts[el.dataset.key] = el.value;
   const li = el.closest('li.q');
   if (li) li.classList.toggle('drafted', !!el.value.trim() || !!li.querySelector('.qopt.on'));
+  if (el.dataset.dir) refreshSubmit(el.dataset.dir);
   if (el.tagName === 'TEXTAREA') fitHeight(el);
   clearTimeout(draftTimers[el.dataset.key]);
   draftTimers[el.dataset.key] = setTimeout(() => saveDraft(el), 1000);
