@@ -20,9 +20,11 @@ def fetch(src):
     if not token:
         return None, 'нет OAuth-токена в ' + src['credentials']
     try:
+        # токен — через stdin (curl -K -), не аргументом: командная строка процесса видна в журналах
+        # аудита (событие 4688, Sysmon, EDR)
         p = subprocess.run(['curl', '-s', '--max-time', '20', '-w', '\n%{http_code} %{errormsg}', URL,
-                            '-H', f'Authorization: Bearer {token}', '-H', 'anthropic-beta: oauth-2025-04-20'],
-                           capture_output=True, timeout=30,
+                            '-H', 'anthropic-beta: oauth-2025-04-20', '-K', '-'],
+                           input=f'header = "Authorization: Bearer {token}"\n'.encode(), capture_output=True, timeout=30,
                            # под pythonw (скрытый запуск) без флага каждый curl открывает окно консоли
                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     except (OSError, subprocess.TimeoutExpired) as e:

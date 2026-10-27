@@ -98,6 +98,16 @@ def load_config():
     return cfg
 
 
+def in_tab_root(cfg, path):
+    """Путь внутри корня какой-нибудь вкладки (каталог задачи панели) — после realpath: без выхода через .. и junction."""
+    n = os.path.normcase(os.path.realpath(path))
+    for t in cfg.get('tabs', []):
+        r = os.path.normcase(os.path.realpath(t['root'])).rstrip('\\/')
+        if n == r or n.startswith(r + os.sep):
+            return True
+    return False
+
+
 def allowed_file(cfg, path):
     """Полный путь файла, если он есть и лежит в корне вкладки или в file_roots, иначе None."""
     p = os.path.realpath(path)
@@ -333,15 +343,33 @@ def log_call(cfg, via, action, args, ok, ms, out_chars=0, in_chars=0, err=''):
     """
     sid = session_id() if via == 'cli' else ''   # сервер мог стартовать из сессии
     rec = {'ts': now_ms(), 'via': via, 'who': 'agent' if sid else 'human', 'sid': sid,
-           'action': action, 'args': args, 'ok': ok, 'ms': ms, 'in_chars': in_chars, 'out_chars': out_chars}
+           'action': action, 'args': _log_args(args), 'ok': ok, 'ms': ms, 'in_chars': in_chars, 'out_chars': out_chars}
     if err:
         rec['err'] = err[:300]
     try:
         os.makedirs(cfg['state_dir'], exist_ok=True)
-        with open(os.path.join(cfg['state_dir'], 'calls.jsonl'), 'a', encoding='utf-8') as f:
+        path = os.path.join(cfg['state_dir'], 'calls.jsonl')
+        if os.path.exists(path) and os.path.getsize(path) > LOG_MAX:   # одно поколение, как журнал доски
+            os.replace(path, path + '.1')
+        with open(path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(rec, ensure_ascii=False) + '\n')
     except OSError:
         pass   # журнал не мешает работе
+
+
+LOG_MAX = 1 << 20
+
+
+def _log_args(args):
+    """В журнал — форма вызова, не содержимое: тексты просьб, ответов, черновиков и объявлений —
+    только длиной (удалённое из задачи не должно жить в журнале). Короткие значения — как есть."""
+    short = lambda v: v if not isinstance(v, str) or len(v) <= 40 else f'<{len(v)} симв.>'
+    if isinstance(args, dict):   # имена полей и пути — как есть, любой другой текст — длиной
+        keep = ('dir', 'board', 'sid', 'field', 'mode', 'status', 'source')
+        return {k: (v if k in keep else f'<{len(v)} симв.>') if isinstance(v, str) else short(v) for k, v in args.items()}
+    if isinstance(args, list):
+        return [short(v) for v in args]
+    return args
 
 
 def now_ms():

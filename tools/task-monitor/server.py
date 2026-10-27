@@ -15,7 +15,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from monitor.core import HOME, allowed_file, load_config, log_call, module_on, modules, now_ms, sources  # noqa: E402
+from monitor.core import HOME, allowed_file, in_tab_root, load_config, log_call, module_on, modules, now_ms, sources  # noqa: E402
 
 FAILS, PAUSE_SEC = 5, 600   # ошибок модуля подряд до паузы, длина паузы
 
@@ -109,6 +109,8 @@ class Hub:
             self.wake[source].set()
             log_call(self.cfg, 'page', f'{source}/refresh', args, True, 0)
             return {'ok': True}
+        if isinstance(args.get('dir'), str) and not in_tab_root(self.cfg, args['dir']):
+            raise PermissionError('каталог вне корней вкладок')   # страница пишет только в задачи панели
         for name, src, mod in sources(self.cfg):
             if name == source and action in getattr(mod, 'ACTIONS', {}):
                 t0, ok = time.time(), False
