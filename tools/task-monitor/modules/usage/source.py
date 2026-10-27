@@ -5,6 +5,7 @@ curl, а не urllib: через системный прокси urllib рвёт
 Сбой не стирает последние удачные цифры: они остаются с отметкой ok_at, ошибка — рядом.
 """
 import json
+import os
 import subprocess
 import time
 
@@ -44,13 +45,30 @@ def fetch(src):
     return data, ''
 
 
+def log(cfg, text):
+    """state_dir/usage.log — сбои и чем кончилась серия повторов: по нему видно, когда и как часто рвётся (≤ 256 КБ)."""
+    try:
+        path = os.path.join(cfg['state_dir'], 'usage.log')
+        if os.path.exists(path) and os.path.getsize(path) > 1 << 18:
+            os.replace(path, path + '.1')
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(time.strftime('%Y-%m-%d %H:%M:%S ') + text + '\n')
+    except OSError:
+        pass
+
+
 def collect(cfg, src, ctx):
     data, error = fetch(src)
+    tries = 1
     for wait in (5, 20, 60):   # TLS через прокси рвётся на рукопожатии сериями — повторы с паузой
         if not error.startswith('нет ответа'):
             break
+        log(cfg, f'попытка {tries}: {error}; повтор через {wait} с')
         time.sleep(wait)
         data, error = fetch(src)
+        tries += 1
+    if error or tries > 1:
+        log(cfg, f'итог после {tries} попыток: {error or "ok"}')
     if data:
         limits = []
         for lim in data['limits']:
