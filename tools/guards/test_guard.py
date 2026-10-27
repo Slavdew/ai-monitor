@@ -56,7 +56,7 @@ CASES = [
     ('env без фильтра', 'Bash', {'command': 'env'}, '', 'deny', None),
     ('env с маской — можно', 'Bash', {'command': "env | sed 's/=.*/=…/'"}, '', 'pass', None),
     # прокси
-    ('netsh winhttp set', 'PowerShell', {'command': 'netsh winhttp set proxy 127.0.0.1:7897'}, '', 'deny', None),
+    ('netsh winhttp set', 'PowerShell', {'command': 'netsh winhttp set proxy 127.0.0.1:8080'}, '', 'deny', None),
     ('реестр ProxyEnable', 'PowerShell', {'command': "Set-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings' ProxyEnable 0"}, '', 'deny', None),
     ('чтение прокси — можно', 'Bash', {'command': 'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings" | grep -i proxy'}, '', 'pass', None),
     ('прокси в тексте памяти — можно', 'Bash', {'command': "echo 'не трогать netsh winhttp set proxy' >> notes.md"}, '', 'pass', None),

@@ -134,7 +134,7 @@ def fix_long_heredoc(tool, inp, ctx):
 
 def rule_heredoc_backslash(tool, inp, ctx):
     """Обратный слеш в теле heredoc приходит в Bash-инструменте искажённым: «\\n» → перевод строки,
-    «D:\\AI\\tasks» → табуляции (память heredoc-backslash: больше двадцати случаев с 19.09.2026)."""
+    «D:\\Work\\tasks» → табуляции (память heredoc-backslash: больше двадцати случаев с 19.09.2026)."""
     if tool != 'Bash':
         return None
     for body in heredoc_bodies(inp.get('command', '')):
