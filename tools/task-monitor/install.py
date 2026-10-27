@@ -24,7 +24,12 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 CLAUDE = os.path.join(os.path.expanduser('~'), '.claude')
 TASK = os.path.join(HERE, 'task.py')
 PY = sys.executable   # тот Python, которым ставили: py и python есть не на каждой машине вместе
-HOOKS = [f'"{PY}" "{TASK}" hook']   # один хук-диспетчер: ответы владельца и hook.py модулей (доска — modules/board)
+# один хук-диспетчер: ответы владельца и hook.py модулей (доска — modules/board). Код 2 у UserPromptSubmit
+# блокирует ввод во всех сессиях (проверено 27.10): нет task.py (копию переключили на старую ветку) или
+# argparse старой версии не знает hook — выходим с 0 и одной строкой в контекст
+HOOKS = [f'"{PY}" -c "import os,runpy,sys;p=r\'{TASK}\';sys.argv=[p,\'hook\'];x=sys.exit;'
+         f'sys.exit=lambda c=0:x(0 if c==2 else c);'
+         f'runpy.run_path(p,run_name=\'__main__\') if os.path.isfile(p) else print(\'task-monitor: no \'+p)"']
 REPLACED = ('session-board.js',)   # прежние хуки, которые диспетчер заменил: снимаются
 ALLOW = [f'Bash(python {TASK.replace(os.sep, "/")} *)', f'PowerShell(python {TASK} *)']
 OLD = ('plan-board\\plan.py', 'task-monitor\\task.py')

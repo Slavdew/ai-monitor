@@ -2,6 +2,7 @@ r"""Дымовой тест панели: копия панели во врем�
 её config.local.json и задачи владельца не трогает.  python tests\smoke.py   (код 0 — всё прошло)
 Сценарий: new → add/ask → batch → set (по id) → сервер: state.json, POST draft/submit → hook видит ответ → ack."""
 import json, os, shutil, subprocess, sys, tempfile, time, urllib.request
+sys.stdout.reconfigure(encoding='utf-8')   # консоль cp1251 не печатает «→»
 
 SRC = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 tmp = tempfile.mkdtemp(prefix='tm-smoke-')
