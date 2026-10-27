@@ -7,6 +7,7 @@ stderr: Claude Code отменяет этот один вызов и показ�
 Правила — функции rule_*(tool, inp) → текст нарушения или None. Новое правило — ещё одна функция.
 """
 import json
+import os
 import re
 import sys
 
@@ -57,6 +58,16 @@ def rule_sed_windows_path(tool, inp):
 RULES = [v for k, v in sorted(globals().items()) if k.startswith('rule_')]
 
 
+def log_refusal(rule, tool, inp, call):
+    """Отказ — в журнал граблей (pitfalls.py рядом); журнала нет или сломан — отказ всё равно в силе."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import pitfalls
+        pitfalls.log_guard(rule, tool, inp, call.get('cwd', ''), call.get('session_id', ''))
+    except Exception:
+        pass
+
+
 def main():
     try:
         call = json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace') or '{}')
@@ -65,6 +76,7 @@ def main():
             why = rule(tool, inp)
             if why:
                 sys.stderr.buffer.write(f'Сторож ({rule.__name__[5:]}): {why}\n'.encode('utf-8'))
+                log_refusal(rule.__name__[5:], tool, inp, call)
                 return 2
     except Exception:   # сломанный сторож не должен останавливать работу
         return 0
