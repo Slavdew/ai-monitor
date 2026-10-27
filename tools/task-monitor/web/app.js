@@ -587,8 +587,12 @@ function renderTab(tab, sectioned) {
   for (const i of tabFolded ? [] : top) {
     if ((i.project || '') !== project) {
       project = i.project || '';
-      if (project) rows.push({ key: 'p:' + tab.id + ':' + project, cls: 'sess', html: `<h3>${esc(project)}</h3>` });
+      // проект сворачивается со счётчиком: на работе параллельных задач много (владелец 28.10)
+      const pk = 'proj:' + tab.id + ':' + project, pOpen = !fold.has(pk);
+      if (project) rows.push({ key: 'p:' + tab.id + ':' + project, cls: 'sess proj',
+        html: `<h3 data-act="fold" data-id="${esc(pk)}" tabindex="0" role="button" aria-expanded="${pOpen}">${chev(pOpen)}${esc(project)} <span class="cnt">${top.filter((x) => (x.project || '') === project).length}</span></h3>` });
     }
+    if (project && fold.has('proj:' + tab.id + ':' + project)) continue;
     walk(i, 0);
   }
   if (nClosed && !tabFolded) rows.push({ key: 'cl:' + tab.id, cls: 'morep', html: moreRow(closedKey, nClosed, 'закрытые задачи') });
