@@ -6,8 +6,7 @@
 
   "_tabs": "group — вкладки с одной группой показываются одной кнопкой, каждая — сворачиваемым разделом под ней",
   "tabs": [
-    { "id": "tasks", "title": "Общие", "group": "Задачи", "root": "example/tasks" },
-    { "id": "ideas", "title": "Идеи", "group": "Задачи", "root": "../../docs/task-monitor/ideas" }
+    { "id": "tasks", "title": "Общие", "group": "Задачи", "root": "example/tasks" }
   ],
   "_files": "Просмотр документов на странице (/f/...): только из корней вкладок и file_roots",
   "file_roots": [],
