@@ -44,6 +44,8 @@ code, out = tm('batch', 'a1', stdin='+ шесть\n99 status=done\n')
 check('batch атомарен', code == 1 and len(json.load(open(os.path.join(d, 'task.json'), encoding='utf-8'))['plan']) == 5, out)
 check('set неверный статус → ошибка', tm('set', 'a1', '2', 'status=xx')[0] == 1)
 check('show', '2 todo' in tm('show', 'a1')[1] or 'два' in tm('show', 'a1')[1])
+code, out = tm('act', 'a1', 'Запустить установщик', '--run', 'py install.py', '--note', 'чтобы включился хук')
+check('act: ожидаемое действие', out == 'ok пункт 6', out)
 
 # захваты ресурсов: отказ с очередью, продление, снятие, сброс после перезагрузки
 check('hold', tm('hold', 'ИБ dev', 'обновление', '--ttl', '20m', sid='A')[1].startswith('ok держу: ИБ dev до '))
@@ -101,6 +103,12 @@ try:
     except urllib.error.HTTPError as e:
         check('free без Origin → 403', e.code == 403, e.code)
     check('владелец снимает захват', post('claims', 'free', {'res': 'стенд'}).get('ok') is True)
+    check('actdone со страницы', post('tabs', 'actdone', {'dir': d, 'index': 5, 'note': 'готово'}).get('ok') is True)
+    try:
+        op.open(urllib.request.Request(f'{base}/api/tabs/actdone', json.dumps({'dir': d, 'index': 5}).encode()))
+        check('actdone без Origin → 403', False)
+    except urllib.error.HTTPError as e:
+        check('actdone без Origin → 403', e.code == 403, e.code)
     # форма «+ Задача»: каталог вне git — задача и вложения; внутри git — отказ (задачи ведутся вне репозиториев)
     sys.path.insert(0, SRC)
     from monitor.core import git_root
@@ -131,6 +139,9 @@ hook_in = json.dumps({'session_id': 'smoke-sid', 'cwd': d})
 code, out = tm('hook', stdin=hook_in)
 check('hook показывает ответ', 'a1#4' in out and 'да' in out, out)
 check('hook второй раз молчит', tm('hook', stdin=hook_in)[1] == '')
+out = tm('unseen')[1]
+check('unseen: действие выполнено', 'a1#6: ВЛАДЕЛЕЦ ВЫПОЛНИЛ ОЖИДАЕМОЕ ДЕЙСТВИЕ' in out and 'готово' in out, out)
+check('ack действия', tm('ack', 'a1', '6')[1] == 'ok')
 check('ack (синоним «принят»)', tm('принят', 'a1', '4', 'done')[1] == 'ok')
 check('unseen пуст', tm('unseen')[1] == 'новых ответов нет')
 print(f'{len(fails)} ошибок, {time.time() - t0:.1f} с')

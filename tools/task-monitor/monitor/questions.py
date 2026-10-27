@@ -150,6 +150,33 @@ def request(cfg, args):
 
 
 
+
+def act_done(cfg, args):
+    """Владелец отметил ожидаемое действие (пункт act) сделанным или «не буду» — со страницы. Пункт закрывается,
+    агент видит отметку хуком и в unseen, как ответ: проверяет результат и подтверждает ack."""
+    n, skip = int(args['index']) + 1, bool(args.get('skip'))
+    note = ' '.join(str(args.get('note') or '').split())
+    at, out = now_ms(), {}
+
+    def fn(t):
+        p = tabs.item(t.get('plan', []), n)
+        if not p.get('act'):
+            raise ValueError(f'пункт {n} — не ожидаемое действие')
+        p.update({'status': 'skip' if skip else 'done', 'seen': False, 'owner_at': at})
+        if note:
+            p['owner_note'] = note
+        out['tid'] = t.get('id') or os.path.basename(args['dir'])
+        with locked(_pending_path(cfg)):
+            pending = read_json(_pending_path(cfg), {}) or {}
+            pending[f'{out["tid"]}#{n}'] = {'dir': args['dir'], 'n': n, 'q': p['text'], 'answers': [note] if note else [],
+                                            'kind': 'act', 'skip': skip, 'at': at}
+            write_json(_pending_path(cfg), pending)
+    tabs.update_task(cfg, args['dir'], fn)
+    with open(os.path.join(cfg['state_dir'], 'events.jsonl'), 'a', encoding='utf-8') as f:
+        f.write(json.dumps({'kind': 'act', 'task': out['tid'], 'items': [n], 'skip': skip, 'at': at}, ensure_ascii=False) + '\n')
+    return {'ok': True}
+
+
 def reword(cfg, dir_, n, text):
     """Агент переписал вопрос (по просьбе «перефразировать»): прежний текст — в was, просьба снята."""
     tabs.update_task(cfg, dir_, lambda t: tabs.apply_item(cfg, t.get('plan', []), n, {'text': text}))
@@ -180,6 +207,10 @@ def ack(cfg, dir_, nums, done=False):
 def _line(key, r):
     """Ответ строкой с готовой командой: ack a 5 done / set a 7 text="…" и ack."""
     tid, _, n = key.rpartition('#')
+    if r.get('kind') == 'act':
+        what = 'НЕ БУДЕТ ДЕЛАТЬ' if r.get('skip') else 'ВЫПОЛНИЛ'
+        return (f'{key}: ВЛАДЕЛЕЦ {what} ОЖИДАЕМОЕ ДЕЙСТВИЕ: {r["q"]}' + (f' | комментарий: {r["answers"][0]}' if r['answers'] else '')
+                + f' → проверь результат (или учти отказ), затем ack {tid} {n}')
     if r.get('kind') == 'req':
         return (f'{key}: НОВАЯ ПРОСЬБА ВЛАДЕЛЬЦА: {r["q"]} → предложи владельцу разобрать (взять в работу, '
                 f'уточнить или отложить), затем ack {tid} {n}')

@@ -8,6 +8,7 @@
   set T N status=done note="…" after=3,4 text="…" section=…      поля пункта
   set T priority=1 stage="…" health=ok next="…" related+=B docs+="Назв::путь"   поля задачи
   batch T < строки                      пачка правок плана одной записью
+  act T "что" --run "команда"         ожидаемое действие владельца (блок «Ожидаемые действия»)
   ack T N… [done]                       ответ учтён (done — заодно закрыть вопрос); синоним — принят T N… [done]
   unseen [--mine]                       неподтверждённые ответы с готовыми командами
   next [--tab T] [--project P] | take T | release [T]  взять первую свободную / эту / отпустить
@@ -156,12 +157,13 @@ def parser():
     for f in ('id', 'title', 'project', 'goal'):
         n.add_argument('--' + f)
     n.add_argument('--plan', nargs='*', default=[]); n.add_argument('--append', action='store_true')
-    for name in ('add', 'ask', 'req'):   # ask / req — синонимы add --ask / add --req
+    for name in ('add', 'ask', 'req', 'act'):   # ask / req / act — синонимы add --ask / --req / --act
         x = sp(name)
         x.add_argument('ref'); x.add_argument('text'); x.add_argument('pairs', nargs='*')
         x.add_argument('--ask', action='store_true'); x.add_argument('--req', action='store_true')
         x.add_argument('--note', default=''); x.add_argument('--section', default='')
         x.add_argument('--opt', action='append', default=[]); x.add_argument('--force', action='store_true')
+        x.add_argument('--act', action='store_true'); x.add_argument('--run', default='')
     st = sp('set'); st.add_argument('ref'); st.add_argument('rest', nargs='+')
     bt = sp('batch'); bt.add_argument('ref')
     ak = sp('ack'); ak.add_argument('ref'); ak.add_argument('n', nargs='+')
@@ -516,6 +518,10 @@ def add(cfg, a):
     item = {'text': a.text, 'status': 'todo'}
     if a.cmd == 'req' or a.req:   # просьба владельца: req=true — блок «Ваши просьбы», пока не сделана
         item.update({'req': True, 'at': time.strftime('%Y-%m-%d')})
+    if a.cmd == 'act' or a.act:   # ожидаемое действие владельца: блок «Ждут вас», пока он не отметит «сделано»
+        item.update({'act': True, 'at': time.strftime('%Y-%m-%d')})
+        if a.run:   # команда, которую владельцу выполнить (страница даёт её скопировать)
+            item['cmd'] = a.run
     item.update({k: v for k, v in (('note', a.note), ('section', a.section)) if v})
     if 'status' in fields and fields['status'] == 'wait':
         raise ValueError('wait — только у вопроса: task.py ask T "вопрос"')
@@ -534,7 +540,7 @@ def run(cfg, a):
     global _stdin_chars
     if a.cmd == 'api':
         return api(cfg, a)
-    if a.cmd in ('add', 'ask', 'req'):
+    if a.cmd in ('add', 'ask', 'req', 'act'):
         print(add(cfg, a))
     elif a.cmd == 'show':
         show(cfg, resolve(cfg, a.ref), a.all)

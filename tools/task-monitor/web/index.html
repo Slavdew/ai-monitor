@@ -245,7 +245,9 @@ th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
 .bf #btext { flex:1 1 320px; min-width:0 } .bf #bkey { width:90px } .bf #bhours { width:60px }
 .bf label { display:inline-flex; gap:6px; align-items:center } .row.dead { opacity:.6 }
 /* вопросы владельцу */
-.tag.wait { color:var(--warn); border-color:var(--warn) } .tag.req { color:var(--acc); border-color:var(--acc) }
+.tag.wait { color:var(--warn); border-color:var(--warn) }
+/* ожидаемое действие: команда — отдельной строкой для копирования, кнопки — рядом */
+.actcmd { display:block; margin:4px 0 } .actbtns { display:inline-flex; gap:6px; margin-left:8px } .tag.req { color:var(--acc); border-color:var(--acc) }
 .wbadge { display:inline-block; min-width:16px; padding:0 4px; border-radius:8px; background:var(--warn); color:var(--bg); font-size:11px; text-align:center }
 /* вопрос: поле ответа в строку, «↺ проще» справа от него */
 /* вопрос — отдельной плашкой; набранный, но не отправленный ответ — зелёный фон и метка «К отправке» */

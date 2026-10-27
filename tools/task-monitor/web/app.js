@@ -28,6 +28,9 @@ const nWait = (i) => (i.plan || []).filter(awaiting).length;
 // отложенная просьба — не открытая: в плане под «отложено», в счёт «Просьбы» не входит
 const openReq = (p) => p.req && p.status !== 'wait' && !['done', 'skip', 'later'].includes(p.state);
 const nReq = (i) => (i.plan || []).filter(openReq).length;
+// ожидаемое действие владельца (пункт act: «запустить install.py»): открыто, пока он не отметит «сделано» / «не буду»
+const openAct = (p) => p.act && !['done', 'skip'].includes(p.state);
+const nAct = (i) => (i.plan || []).filter(openAct).length;
 // подписи статусов плана: коды остаются в данных и CLI, на странице — слова (ui.labels в конфиге)
 const label = (st) => (state.ui?.labels || {})[st] || st;
 
@@ -215,7 +218,7 @@ function planRow(i, p, k, full, answer = full) {
     : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="Сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${(p.req || p.act) && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && answer && openAct(p) ? `<span class="actbtns"><button class="btn sm primary" data-act="actdone" data-dir="${esc(i.dir)}" data-index="${k}">Сделано</button><button class="btn sm" data-act="actdone" data-skip="1" data-dir="${esc(i.dir)}" data-index="${k}" title="Агент узнает, что делать не будете">Не буду</button></span>` : ''}${p.act && p.owner_note ? `<span class="sess"> · ваш комментарий: ${esc(p.owner_note)}</span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length;
 const submitInner = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Отправить Claude (${nDraftOf(i)})</button>
@@ -456,7 +459,7 @@ function itemRow(i, child, kids, last) {
       ${prioTag(i)}<span class="id">${esc(i.id)}</span><span class="title" title="${esc(i.title)}">${esc(i.title)}</span>${stageTag(i)}${healthTag(i)}
       <span class="grow"></span>
       ${i.parent_kind === 'link' ? `<span class="tag link">→ ${esc(i.parent)}</span>` : ''}
-      ${nWait(i) ? `<span class="tag wait" title="Вопросы ждут вашего ответа">Ждут вас: ${nWait(i)}</span>` : ''}
+      ${nWait(i) ? `<span class="tag wait" title="Вопросы ждут вашего ответа">Ждут вас: ${nWait(i)}</span>` : ''}${nAct(i) ? `<span class="tag wait" title="Агент ждёт от вас действий">Действия: ${nAct(i)}</span>` : ''}
       ${nReq(i) ? `<span class="tag req" title="Ваши просьбы, ещё не сделанные">Просьбы: ${nReq(i)}</span>` : ''}
       ${(i.waits || []).length ? `<span class="tag blocked" title="Заблокирована незавершёнными задачами">⏳ Ждёт ${esc(i.waits.join(', '))}</span>` : ''}
       ${claimTag(i)} ${holdTags(i)}
@@ -818,7 +821,7 @@ function renderBoard() {
 
 // «Ждут вас»: всё неразобранное владельцем — вопросы и его просьбы всех задач, ответ на месте
 const items = () => src('tabs').items || [];
-const pending = () => items().filter((i) => (i.plan || []).some((p) => p.status === 'wait') || nReq(i));
+const pending = () => items().filter((i) => (i.plan || []).some((p) => p.status === 'wait') || nReq(i) || nAct(i));
 function renderInbox() {
   const all = src('tabs').tabs || [];
   const isAsked = (i) => (i.plan || []).some((p) => p.status === 'wait');
@@ -828,6 +831,14 @@ function renderInbox() {
   const asked = items().filter((i) => isAsked(i) && inSub(i));
   const withReq = items().filter((i) => nReq(i) && inSub(i));
   const rows = st ? [st.row] : [];
+  // ожидаемые действия — первыми: агент стоит, пока их не сделать
+  const acting = items().filter((i) => nAct(i) && inSub(i));
+  if (acting.length) rows.push({ key: 'act-h', cls: 'tabsec static', html: `<h2>Ожидаемые действия <span class="cnt">${acting.reduce((s, i) => s + nAct(i), 0)}</span></h2>` });
+  for (const i of acting) {
+    const acts = (i.plan || []).map((p, k) => (openAct(p) ? planRow(i, p, k, false, true) : '')).join('');
+    rows.push({ key: 'act:' + i.tab + ':' + i.id, cls: 'row card inbox', html: `<div class="dhead"><span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>${cardBtn(i)}</div><ul class="plan">${acts}</ul>` });
+  }
+  if (acting.length) rows.push({ key: 'q-h', cls: 'tabsec static', html: '<h2>Вопросы</h2>' });
   const drafted = asked.filter(nDraftOf);
   if (drafted.length > 1) rows.push({ key: 'in-all', cls: 'morep', html: `<button class="btn primary" data-act="submitall">Отправить все (${drafted.reduce((s, i) => s + nDraftOf(i), 0)})</button> <span class="sess">Ответы ${drafted.length} задач одной кнопкой</span>` });
   if (!asked.length) rows.push({ key: 'in-none', cls: 'empty', html: 'Вопросов нет' });
@@ -856,7 +867,7 @@ function renderInbox() {
 // «Канбан»: открытые задачи по колонкам состояния (вычисляется, агенту ничего писать не нужно);
 // карточка — главное о задаче, щелчок — её карточка. Типы задач — подвкладками
 const KANBAN = [
-  ['wait', 'Ждут вас', (i) => nWait(i) > 0],
+  ['wait', 'Ждут вас', (i) => nWait(i) > 0 || nAct(i) > 0],
   ['blocked', 'Стоят', (i) => i.health === 'blocked' || !!i.blocked || (i.waits || []).length > 0],
   ['doing', 'В работе', (i) => liveSessions(i.id).n > 0 || !!(src('claims').list || {})[i.id] || (i.plan || []).some((p) => p.status === 'doing')],
   ['todo', 'К работе', () => true],
@@ -924,7 +935,7 @@ function render() {
   if (ae?.dataset?.act === 'draft' || (ae?.closest?.('.bf') && ae.tagName === 'INPUT')) { renderLater = true; return; }
   renderLater = false;
   const vs = views();
-  const waitOf = (tabIds) => (src('tabs').items || []).filter((i) => tabIds.includes(i.tab)).reduce((s, i) => s + nWait(i), 0);
+  const waitOf = (tabIds) => (src('tabs').items || []).filter((i) => tabIds.includes(i.tab)).reduce((s, i) => s + nWait(i) + nAct(i), 0);
   for (const v of vs) {
     if (v.id.startsWith('grp:')) v.wait = waitOf((src('tabs').tabs || []).filter((t) => 'grp:' + t.group === v.id).map((t) => t.id));
     else if (v.id.startsWith('tab:')) v.wait = waitOf([v.id.slice(4)]);
@@ -1083,6 +1094,12 @@ document.addEventListener('click', async (e) => {
     await ntSave();
   } else if (a === 'ntcancel') {
     nt = null; render();
+  } else if (a === 'actdone') {
+    const skip = !!t.dataset.skip;
+    const note = skip ? prompt('Почему не будете? (агент увидит; можно пусто)') : '';
+    if (note === null) return;
+    const r = await post('tabs', 'actdone', { dir: t.dataset.dir, index: +t.dataset.index, skip, note });
+    if (r.ok) toast(skip ? 'Агент узнает, что действия не будет' : 'Отмечено — агент проверит результат');
   } else if (a === 'free') {
     await post('claims', 'free', { res: t.dataset.res });
   } else if (a === 'select') {
