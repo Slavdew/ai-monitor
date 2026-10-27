@@ -5,10 +5,11 @@ r"""Подключить панель задач и доску объявлен�
 
 - копирует навыки task-monitor, session-board и handoff в ~/.claude/skills;
 - в ~/.claude/settings.json: один хук UserPromptSubmit — task.py hook (ответы владельца, доска и другие модули;
-  прежний session-board.js снимается),
+  прежний session-board.js снимается); хук PreToolUse на Bash — сторож tools/guards/guard.py (частые грабли:
+  обратный слеш в heredoc, sed -i с путём Windows),
   разрешение на task.py, переменная SESSION_BOARD — доска машины, когда в проекте нет .dev.env;
 - обёртка `tm` (имя — --name): `tm.cmd` для PowerShell и cmd, `tm` без расширения для Git Bash, в папку --bin
-  (по умолчанию %LOCALAPPDATA%	ask-monitorin), папка — в пользовательский PATH (без прав администратора;
+  (по умолчанию %LOCALAPPDATA%\task-monitor\bin), папка — в пользовательский PATH (без прав администратора;
   открытые VS Code и приложение Claude увидят её после перезапуска); разрешения Bash(tm *), PowerShell(tm *).
   Без обёртки навык зовёт task.py полным путём — работает и так;
 - --clean: убрать из настроек проекта прежние хуки plan board и task.py (иначе сработают дважды).
@@ -30,6 +31,11 @@ PY = sys.executable   # тот Python, которым ставили: py и pyth
 HOOKS = [f'"{PY}" -c "import os,runpy,sys;p=r\'{TASK}\';sys.argv=[p,\'hook\'];x=sys.exit;'
          f'sys.exit=lambda c=0:x(0 if c==2 else c);'
          f'runpy.run_path(p,run_name=\'__main__\') if os.path.isfile(p) else print(\'task-monitor: no \'+p)"']
+# сторож вызовов (tools/guards/guard.py): PreToolUse на Bash, код 2 отменяет один вызов и объясняет агенту
+# почему. Нет файла (ветка без guards) — молча 0: иначе отменялся бы каждый вызов Bash
+GUARD = os.path.join(REPO, 'tools', 'guards', 'guard.py')
+GUARD_HOOK = (f'"{PY}" -c "import os,runpy,sys;p=r\'{GUARD}\';sys.argv=[p];'
+              f'runpy.run_path(p,run_name=\'__main__\') if os.path.isfile(p) else None"')
 REPLACED = ('session-board.js',)   # прежние хуки, которые диспетчер заменил: снимаются
 ALLOW = [f'Bash(python {TASK.replace(os.sep, "/")} *)', f'PowerShell(python {TASK} *)']
 OLD = ('plan-board\\plan.py', 'task-monitor\\task.py')
@@ -163,6 +169,13 @@ def main():
     new = [{'type': 'command', 'command': c, 'timeout': 5} for c in HOOKS if c not in have]
     if new:
         groups.append({'hooks': new})
+    pre = d['hooks'].setdefault('PreToolUse', [])
+    for g in pre:   # прежний запуск сторожа (другой путь Python или репозитория) — заменить
+        g['hooks'] = [h for h in g.get('hooks', []) if 'guard.py' not in h.get('command', '') or h['command'] == GUARD_HOOK]
+    pre[:] = [g for g in pre if g.get('hooks')]
+    if not any(h.get('command') == GUARD_HOOK for g in pre for h in g['hooks']):
+        pre.append({'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': GUARD_HOOK, 'timeout': 5}]})
+        new = new + ['guard']   # новым списком: прежний уже лежит в хуках UserPromptSubmit
     rules = ALLOW + ([f'Bash({a.name} *)', f'PowerShell({a.name} *)'] if a.name else [])
     allow = d.setdefault('permissions', {}).setdefault('allow', [])
     allow += [r for r in rules if r not in allow]
