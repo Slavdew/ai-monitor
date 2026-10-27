@@ -128,7 +128,7 @@ function claimTag(i, release) {
     + (release ? ` <button class="ibtn" data-act="release" data-task="${esc(i.id)}" title="Отпустить захват">×</button>` : '');
 }
 
-const cardBtn = (i) => `<button class="ibtn go" data-act="card" data-ref="${esc(i.tab + '|' + i.id)}" title="Открыть карточку задачи">↗</button>`;
+const cardBtn = (i) => `<button class="ibtn go" data-act="card" data-ref="${esc(i.tab + '|' + i.id)}" title="Открыть карточку задачи" aria-label="Открыть карточку задачи"><svg viewBox="0 0 16 16" width="13" height="13" style="display:block;margin:auto" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6.6" cy="6.6" r="4.2"/><path d="m9.8 9.8 3.8 3.8"/></svg></button>`;
 
 // --- вопросы владельцу: пункт плана q; ответ черновиком (сохраняется сам), «Отправить Claude» — пачкой по задаче ---
 
