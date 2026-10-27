@@ -834,10 +834,12 @@ function renderInbox() {
   // просьбы владельца ждут агента, не его — внизу свёрнутой строкой, чтобы видеть неразобранное
   const n = withReq.reduce((s, i) => s + nReq(i), 0);
   if (n) rows.push({ key: 'in-req', cls: 'morep', html: moreRow('inbox:req', n, 'ваши просьбы у агентов') });
-  if (n && shown.has('inbox:req')) for (const i of withReq) {
-    const reqs = (i.plan || []).map((p, k) => (openReq(p) ? planRow(i, p, k, false) : '')).join('');
-    rows.push({ key: 'inr:' + i.tab + ':' + i.id, cls: 'row card inbox',
-      html: `<div class="dhead"><span class="id">${esc(i.id)}</span><span class="title grow">${esc(i.title)}</span>${cardBtn(i)}</div><ul class="plan">${reqs}</ul>` });
+  if (n && shown.has('inbox:req')) for (const i of withReq) {   // блок задачи сворачивается, как у вопросов
+    const fk = 'inr:' + i.tab + '|' + i.id, open = !fold.has(fk);
+    const reqs = open ? (i.plan || []).map((p, k) => (openReq(p) ? planRow(i, p, k, false) : '')).join('') : '';
+    rows.push({ key: 'inr:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
+      html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
+        <span class="tag req">Просьбы: ${nReq(i)}</span>${cardBtn(i)}</div>${open ? `<ul class="plan">${reqs}</ul>` : ''}` });
   }
   return rows;
 }
