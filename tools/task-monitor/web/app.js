@@ -168,6 +168,8 @@ function qaHtml(i, p, k, edit) {
   return `<div class="qa">${advice}${was}${answers}${asked}${status}${bar}
     <textarea class="draft" rows="1" data-act="draft" ${at} placeholder="${esc(ph)}">${esc(draft)}</textarea></div>`;
 }
+// ответ набран, но не отправлен: строка вопроса подсвечена «К отправке» (на вводе — сразу, без перерисовки)
+const hasDraft = (i, p, k) => { const key = i.dir + '|' + k; return !!((drafts[key] ?? p.draft ?? '').trim() || optOf(p, key)); };
 // выбранный вариант: несохранённое — drafts[«…|o»]; старая галочка «проще» (rephrase_draft) — как вариант «проще»
 const optOf = (p, key) => (key + '|o' in drafts ? drafts[key + '|o'] : p.draft_opt ?? (p.rephrase_draft != null ? '@reword' : null)) || null;
 
@@ -193,7 +195,7 @@ function planRow(i, p, k, full, answer = full) {
     : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="Сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length;
 const submitHtml = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Отправить Claude (${nDraftOf(i)})</button>
@@ -958,6 +960,8 @@ document.addEventListener('input', (e) => {
   if (el.dataset.act === 'reqtext') { reqDraft[el.dataset.ref] = el.value; return; }
   if (el.dataset.act !== 'draft') return;
   drafts[el.dataset.key] = el.value;
+  const li = el.closest('li.q');
+  if (li) li.classList.toggle('drafted', !!el.value.trim() || !!li.querySelector('.qopt.on'));
   if (el.tagName === 'TEXTAREA') { el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; }
   clearTimeout(draftTimers[el.dataset.key]);
   draftTimers[el.dataset.key] = setTimeout(() => saveDraft(el), 1000);
