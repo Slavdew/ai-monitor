@@ -11,7 +11,7 @@
   ack T N… [done]                       ответ учтён (done — заодно закрыть вопрос)
   unseen [--mine]                       неподтверждённые ответы с готовыми командами
   next [--tab T] [--project P] | take T | release [T]  взять первую свободную / эту / отпустить
-  api [источник действие ключ=…] | stats [--days 7] | hook | watch [--task T]
+  api [источник действие ключ=…] | stats [--days 7] | hook | watch [--task T] | modules
 
 Ответ: ok / ok пункт N; ошибка — одна строка «ошибка: …», код 1. Сессия — TASK_SESSION, --sid или
 CLAUDE_CODE_SESSION_ID. Подробно: task.py help batch | set | links | questions | api | agent
@@ -29,9 +29,9 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from monitor.core import load_config, log_call, model_on, read_json, session_id, sources  # noqa: E402
+from monitor.core import load_config, log_call, model_on, module_on, module_settings, modules, read_json, require, session_id, sources  # noqa: E402
 from monitor import questions  # noqa: E402
-from monitor.sources import claims, sessions, tabs  # noqa: E402
+from monitor.sources import tabs  # noqa: E402
 
 TOPICS = {
     'set': """set — правка пункта или задачи одной грамматикой ключ=значение (значение с пробелами — в кавычках)
@@ -157,6 +157,7 @@ def parser():
     wt = sp('watch'); wt.add_argument('--task')
     ap = sp('api'); ap.add_argument('source', nargs='?'); ap.add_argument('action', nargs='?'); ap.add_argument('pairs', nargs='*')
     sa = sp('stats'); sa.add_argument('--days', type=float, default=7)
+    sp('modules')
     nx = sp('next'); nx.add_argument('--tab'); nx.add_argument('--project'); nx.add_argument('--force', action='store_true')
     rl = sp('release'); rl.add_argument('ref', nargs='?')
     tk = sp('take'); tk.add_argument('ref'); tk.add_argument('--force', action='store_true')
@@ -192,6 +193,8 @@ def main():
         return
     if a.cmd == 'stats':
         return stats(cfg, a.days)
+    if a.cmd == 'modules':
+        return list_modules(cfg)
     if a.cmd in ('hook', 'watch'):   # без журнала вызовов: хук срабатывает на каждый ввод
         return hook(cfg) if a.cmd == 'hook' else watch(cfg, a.task)
     sid = session_id()
@@ -199,8 +202,8 @@ def main():
         log_call(cfg, 'cli', a.cmd, argv[1:], False, 0, 0, len(' '.join(sys.argv)))
         print('панель: вызовы агента выключены (model.cli)')   # одна строка — минимум токенов
         return
-    if sid:
-        claims.touch(cfg, sid)   # захват сессии вне реестра жив, пока она зовёт task.py
+    if sid and module_on(cfg, 'claims'):
+        require(cfg, 'claims').touch(cfg, sid)   # захват сессии вне реестра жив, пока она зовёт task.py
     out, real, t0, ok, exit_code, err = io.StringIO(), sys.stdout, time.time(), False, 0, ''
     sys.stdout = out
     try:
@@ -239,6 +242,13 @@ def stats(cfg, days):
         print(f'{who:6} {via:5} {action:14} {n:7} {err:6} {round((ci + co) / 3) if via == "cli" else 0:9}')
     if errs:
         print('последние ошибки:\n  ' + '\n  '.join(errs[-5:]))
+
+
+def list_modules(cfg):
+    """Модули строкой: имя, вкл/выкл/ошибка, версия, хеш содержимого (A14 — видно, что за код исполняется), путь."""
+    for n, r in modules(cfg).items():
+        st = 'ошибка: ' + r['error'] if r['error'] else ('ядро' if r['core'] else 'вкл' if module_on(cfg, n) else 'выкл')
+        print(f"{n} {st} v{r['manifest'].get('version', '-')} {r['hash'] or '-'} {r['dir']}")
 
 
 def hook(cfg):
@@ -523,6 +533,7 @@ def run(cfg, a):
         sid = session_id()
         if not sid:
             raise ValueError('нужна сессия: TASK_SESSION=<id>, --sid <id> или CLAUDE_CODE_SESSION_ID')
+        claims = require(cfg, 'claims')
         if a.cmd == 'take':   # взять конкретную задачу: ответы владельца по ней хук покажет этой сессии целиком
             d = resolve(cfg, a.ref)
             i = tabs.read_item(d, {'id': ''}, cfg)
@@ -546,7 +557,7 @@ def run(cfg, a):
         empty = [t for t in want if t not in missing and not any(i['tab'] == t for i in items)]
         if empty:
             print(f'предупреждение: во вкладках {", ".join(empty)} нет задач')
-        ss = sessions.collect(cfg, cfg['sources']['sessions'], {'tabs': {'items': items},
+        ss = require(cfg, 'sessions').collect(cfg, module_settings(cfg, 'sessions'), {'tabs': {'items': items},
                                                                'claims': {'list': claims.claims(cfg)}})['list']
         i = claims.pick(cfg, items, ss, sid, a.tab, a.project, a.force)
         if not i:

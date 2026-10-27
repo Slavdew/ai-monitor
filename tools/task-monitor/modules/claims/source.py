@@ -10,8 +10,8 @@ import json
 import os
 import re
 
-from monitor.core import expand, now_ms, read_json
-from monitor.sources.sessions import alive
+from monitor.core import expand, module_settings, now_ms, read_json
+from monitor.core import pid_alive as alive
 
 OPEN_SKIP = ('done', 'blocked', 'waiting-owner')   # статусы из шапки HANDOFF, которые не берём
 
@@ -22,7 +22,7 @@ def _dir(cfg):
 
 def _registry(cfg):
     """{sid: жив ли процесс} по реестру сессий Claude Code."""
-    reg = expand(cfg['sources'].get('sessions', {}).get('registry', '~/.claude/sessions'))
+    reg = expand(module_settings(cfg, 'sessions').get('registry', '~/.claude/sessions'))
     out = {}
     for path in glob.glob(os.path.join(reg, '*.json')):
         r = read_json(path) or {}
@@ -34,7 +34,7 @@ def _registry(cfg):
 def _alive(cfg, c, reg):
     if c.get('sid') in reg:
         return reg[c['sid']]
-    ttl = cfg['sources'].get('claims', {}).get('ttl_sec', 1800)
+    ttl = module_settings(cfg, 'claims').get('ttl_sec', 1800)
     return now_ms() - c.get('at', 0) < ttl * 1000
 
 
@@ -78,7 +78,7 @@ def pick_tabs(cfg, tab=None):
         if tab not in have:
             raise ValueError(f'нет вкладки {tab} (есть: {", ".join(have)})')
         return [tab], []
-    want = cfg['sources'].get('claims', {}).get('tabs') or [t for t in have if t != 'ideas']
+    want = module_settings(cfg, 'claims').get('tabs') or [t for t in have if t != 'ideas']
     return want, [t for t in want if t not in have]
 
 

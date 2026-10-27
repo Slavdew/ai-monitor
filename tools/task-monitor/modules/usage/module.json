@@ -1,0 +1,2 @@
+{ "name": "usage", "api": 1, "version": "1.0", "title": "Лимиты подписки Claude", "every_sec": 300,
+  "settings": { "credentials": "~/.claude/.credentials.json" } }

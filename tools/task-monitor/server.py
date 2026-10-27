@@ -15,7 +15,9 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from monitor.core import HOME, allowed_file, load_config, log_call, now_ms, sources  # noqa: E402
+from monitor.core import HOME, allowed_file, load_config, log_call, module_on, modules, now_ms, sources  # noqa: E402
+
+FAILS, PAUSE_SEC = 5, 600   # ошибок модуля подряд до паузы, длина паузы
 
 WEB = os.path.join(HOME, 'web')
 TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css'}
@@ -39,14 +41,12 @@ class Hub:
         self.digest = ''
         self.changed = threading.Condition()
         self.kick = threading.Event()
+        self.fails, self.last_err = {}, {}   # модуль -> (ошибок подряд, пауза до); последняя ошибка
 
     def _slow(self, name, src, mod):
         wake = self.wake.setdefault(name, threading.Event())
         while True:
-            try:
-                self.slow[name] = mod.collect(self.cfg, src, {})
-            except Exception as e:  # источник не валит сервер
-                self.slow[name] = {'error': f'{type(e).__name__}: {e}'}
+            self.slow[name] = self._guarded(name, lambda: mod.collect(self.cfg, src, {}))
             self.kick.set()
             wake.wait(src['every_sec'])
             wake.clear()
@@ -57,22 +57,38 @@ class Hub:
                 threading.Thread(target=self._slow, args=(name, src, mod), daemon=True).start()
         threading.Thread(target=self._loop, daemon=True).start()
 
+    def _guarded(self, name, fn):
+        """Вызов модуля (A4): ошибка — {'error'}; FAILS подряд — пауза PAUSE_SEC, модуль не дёргается зря."""
+        n, until = self.fails.get(name, (0, 0))
+        if until > time.time():
+            return {'error': self.last_err.get(name, ''), 'paused_until': int(until * 1000)}
+        try:
+            out = fn()
+            self.fails.pop(name, None)
+            return out
+        except Exception as e:  # модуль не валит сервер
+            self.last_err[name] = f'{type(e).__name__}: {e}'
+            n += 1
+            self.fails[name] = (0, time.time() + PAUSE_SEC) if n >= FAILS else (n, 0)
+            return {'error': self.last_err[name]}
+
     def collect(self):
         ctx = {}
         for name, src, mod in sources(self.cfg):
             if src.get('every_sec'):
                 ctx[name] = self.slow.get(name, {'pending': True})
                 continue
-            try:
-                ctx[name] = mod.collect(self.cfg, src, ctx)
-            except Exception as e:
-                ctx[name] = {'error': f'{type(e).__name__}: {e}'}
-        raw = json.dumps(ctx, ensure_ascii=False, sort_keys=True)
+            ctx[name] = self._guarded(name, lambda: mod.collect(self.cfg, src, ctx))
+        mods = {n: {'title': r['manifest'].get('title', ''), 'version': r['manifest'].get('version', ''), 'core': r['core'],
+                    'on': module_on(self.cfg, n), 'error': r['error'], 'dir': r['dir']}
+                for n, r in modules(self.cfg).items()}
+        ctx_all = {**ctx, 'core': {'modules': mods}}
+        raw = json.dumps(ctx_all, ensure_ascii=False, sort_keys=True)
         digest = hashlib.sha1(raw.encode()).hexdigest()
         if digest != self.digest:
             with self.changed:
                 self.digest, self.rev = digest, self.rev + 1
-                self.body = json.dumps({'rev': self.rev, 'at': now_ms(), 'sources': ctx,
+                self.body = json.dumps({'rev': self.rev, 'at': now_ms(), 'sources': ctx_all,
                                         'model': self.cfg.get('model', {}), 'ui': self.cfg.get('ui', {})},
                                        ensure_ascii=False).encode()
                 self.changed.notify_all()
@@ -84,6 +100,11 @@ class Hub:
             self.kick.clear()
 
     def act(self, source, action, args):
+        if source == 'core' and action == 'reload':   # пересобрать реестр модулей без перезапуска
+            modules(self.cfg, reload=True)
+            log_call(self.cfg, 'page', 'core/reload', args, True, 0)
+            self.kick.set()
+            return {'ok': True, 'note': 'новые медленные модули (every_sec) — после перезапуска сервера'}
         if action == 'refresh' and source in self.wake:
             self.wake[source].set()
             log_call(self.cfg, 'page', f'{source}/refresh', args, True, 0)

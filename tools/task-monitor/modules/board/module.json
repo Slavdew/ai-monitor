@@ -1,0 +1,2 @@
+{ "name": "board", "api": 1, "version": "1.0", "title": "Доска объявлений сессий (session-board)",
+  "settings": { "dir": "%LOCALAPPDATA%/1c-ib-queue", "skill": "../../skills/session-board", "owner": "владелец", "key": "user", "default": "", "history": 100 } }

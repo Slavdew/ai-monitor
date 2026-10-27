@@ -7,7 +7,7 @@ import os
 import re
 import shlex
 
-from monitor.core import front_matter, locked, read_json, text_paths, write_json
+from monitor.core import CORE_API, front_matter, locked, read_json, text_paths, write_json
 
 
 def _title_goal(text):
@@ -197,11 +197,16 @@ def _task_path(cfg, dir_):
 
 
 def update_task(cfg, dir_, fn):
-    """Прочитать, поправить fn, записать — под замком. Исключение в fn — файл не тронут."""
+    """Прочитать, поправить fn, записать — под замком. Исключение в fn — файл не тронут.
+    v — версия формата (CORE_API): файл новее ядра (правило другое ядро — ветка, worktree, коллега) старое
+    ядро не перезаписывает, чтобы не потерять незнакомые поля (A17)."""
     path = _task_path(cfg, dir_)
     with locked(path):
         task = read_json(path, {}) or {}
+        if int(task.get('v') or 0) > CORE_API:
+            raise ValueError(f'task.json формата v{task["v"]}, ядро панели — v{CORE_API}: обновите панель')
         fn(task)
+        task['v'] = CORE_API
         write_json(path, task)
     return task
 

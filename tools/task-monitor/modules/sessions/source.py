@@ -6,29 +6,13 @@ Ctrl+C). Последнее сообщение — mtime транскрипта.
 import glob
 import json
 import os
-import sys
 
-from monitor.core import expand, now_ms, read_json, write_json
+from monitor.core import expand, now_ms, pid_alive, read_json, write_json
 
 DAY_MS = 86400000
 
 
-def alive(pid):
-    if sys.platform != 'win32':
-        try:
-            os.kill(pid, 0)
-            return True
-        except OSError:
-            return False
-    import ctypes
-    k = ctypes.windll.kernel32
-    h = k.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
-    if not h:
-        return False
-    code = ctypes.c_ulong()
-    ok = k.GetExitCodeProcess(h, ctypes.byref(code))
-    k.CloseHandle(h)
-    return bool(ok) and code.value == 259     # STILL_ACTIVE
+alive = pid_alive   # прежнее имя: им пользуются модули и task.py
 
 
 def transcript(root, sid):

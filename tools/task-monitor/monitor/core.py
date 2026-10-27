@@ -1,14 +1,18 @@
-"""Общее для сервера и CLI: конфиг, пути, атомарная запись, шапка Markdown.
+"""Общее для сервера и CLI: конфиг, пути, атомарная запись, шапка Markdown, реестр модулей.
 
-Источник данных — модуль monitor.sources.<имя> с функцией collect(cfg, src, ctx) -> dict
-и необязательным словарём ACTIONS {имя: fn(cfg, src, args) -> dict}. Порядок и включение —
-cfg["sources"]; ctx — результаты источников, собранных раньше в этом же проходе.
+Источник данных — функция collect(cfg, src, ctx) -> dict и необязательный словарь
+ACTIONS {имя: fn(cfg, src, args) -> dict}: у ядра — monitor/sources/tabs.py, у модулей —
+modules/<имя>/source.py рядом с module.json. ctx — результаты источников, собранных раньше в
+этом же проходе (порядок — по after манифеста).
 """
 import contextlib
+import hashlib
 import importlib
+import importlib.util
 import json
 import os
 import re
+import sys
 import tempfile
 import time
 
@@ -133,13 +137,123 @@ def text_paths(cfg, texts, base):
     return out
 
 
+# --- реестр модулей (decisions.md A1–A4) ---
+# Ядро: источник tabs (monitor/sources). Модуль — каталог с module.json и source.py (collect, ACTIONS)
+# в modules/ панели или в каталогах cfg["module_dirs"]. Настройки модуля: settings манифеста, поверх —
+# cfg["sources"][имя]. Сломанный модуль не валит панель: ошибка — в modules()[имя]["error"].
+CORE_API = 1
+CORE_SOURCES = ('tabs',)
+_registry = {}
+
+
+def _tree_hash(d):
+    h = hashlib.sha1()
+    for f in sorted(os.listdir(d)):
+        p = os.path.join(d, f)
+        if os.path.isfile(p):
+            h.update(f.encode())
+            with open(p, 'rb') as fh:
+                h.update(fh.read())
+    return h.hexdigest()[:10]
+
+
+def modules(cfg, reload=False):
+    """{имя: {name, dir, manifest, mod, error, hash, core}} — собирается один раз на процесс."""
+    if _registry and not reload:
+        return _registry
+    _registry.clear()
+    for name in CORE_SOURCES:
+        _registry[name] = {'name': name, 'core': True, 'dir': os.path.join(HOME, 'monitor', 'sources'), 'manifest': {'api': CORE_API},
+                           'mod': importlib.import_module(f'monitor.sources.{name}'), 'error': '', 'hash': ''}
+    dirs = [os.path.join(HOME, 'modules')] + [expand(d) for d in cfg.get('module_dirs', [])]
+    for base in dirs:
+        for sub in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+            d = os.path.join(base, sub)
+            man = read_json(os.path.join(d, 'module.json'))
+            if not isinstance(man, dict):
+                continue
+            name = man.get('name') or sub
+            rec = {'name': name, 'core': False, 'dir': d, 'manifest': man, 'mod': None, 'error': '', 'hash': _tree_hash(d)}
+            prev = _registry.get(name)
+            if prev and man.get('replaces') != name:
+                rec['error'] = f'имя {name} уже занято модулем из {prev["dir"]} (нужно "replaces": "{name}")'
+                _registry[f'{name}@{d}'] = rec
+                continue
+            if man.get('api') != CORE_API:
+                rec['error'] = f'модуль для api {man.get("api")}, ядро — {CORE_API}'
+            else:
+                try:
+                    spec = importlib.util.spec_from_file_location(f'tm_modules.{name}', os.path.join(d, 'source.py'))
+                    mod = importlib.util.module_from_spec(spec)
+                    sys.modules[spec.name] = mod
+                    spec.loader.exec_module(mod)
+                    rec['mod'] = mod
+                except Exception as e:   # сломанный модуль — запись с ошибкой, не падение
+                    rec['error'] = f'{type(e).__name__}: {e}'
+            _registry[name] = rec
+    return _registry
+
+
+def module_settings(cfg, name):
+    rec = modules(cfg).get(name) or {}
+    return merge(rec.get('manifest', {}).get('settings', {}), cfg.get('sources', {}).get(name, {}))
+
+
+def module_on(cfg, name):
+    rec = modules(cfg).get(name)
+    return bool(rec and rec['mod'] and module_settings(cfg, name).get('enabled', rec['manifest'].get('enabled', True)))
+
+
 def sources(cfg):
-    """[(имя, настройки, модуль)] включённых источников в порядке конфига."""
+    """[(имя, настройки, модуль)] включённых и загрузившихся источников: ядро, затем модули по after
+    (кто читает ctx другого — после него), при равенстве — по имени."""
+    recs = {n: r for n, r in modules(cfg).items() if '@' not in n and module_on(cfg, n)}
+    order, seen = [], set()
+
+    def visit(n, path=()):
+        if n in seen or n not in recs or n in path:
+            return
+        for dep in recs[n]['manifest'].get('after', []):
+            visit(dep, path + (n,))
+        seen.add(n)
+        order.append(n)
+    for n in [*CORE_SOURCES, *sorted(recs)]:
+        visit(n)
     out = []
-    for name, src in cfg.get('sources', {}).items():
-        if src.get('enabled', True):
-            out.append((name, src, importlib.import_module(f'monitor.sources.{name}')))
+    for n in order:
+        src = module_settings(cfg, n)
+        if recs[n]['manifest'].get('every_sec') and 'every_sec' not in src:
+            src['every_sec'] = recs[n]['manifest']['every_sec']
+        out.append((n, src, recs[n]['mod']))
     return out
+
+
+def require(cfg, name):
+    """Модуль, без которого команда не работает (claims для next/take): выключен или сломан — понятная ошибка."""
+    rec = modules(cfg).get(name)
+    if not rec or not module_on(cfg, name):
+        why = 'не установлен' if not rec else rec['error'] or f'выключен в настройках (sources.{name}.enabled)'
+        raise ValueError(f'модуль {name}: {why}')
+    return rec['mod']
+
+
+def pid_alive(pid):
+    """Процесс с этим pid жив (на Windows через OpenProcess: os.kill(pid, 0) там шлёт Ctrl+C)."""
+    if sys.platform != 'win32':
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+    import ctypes
+    k = ctypes.windll.kernel32
+    h = k.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return False
+    code = ctypes.c_ulong()
+    ok = k.GetExitCodeProcess(h, ctypes.byref(code))
+    k.CloseHandle(h)
+    return bool(ok) and code.value == 259   # STILL_ACTIVE
 
 
 def model_on(cfg, feature):

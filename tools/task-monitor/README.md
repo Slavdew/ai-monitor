@@ -7,9 +7,13 @@
 
 - `config.default.json` — умолчания (в git). Личное: `config.local.json` (в .gitignore) =
   `{"settings": "D:/где-угодно/settings.json"}`, этот файл перекрывает умолчания поверх.
-- `monitor/sources/<имя>.py` — источник данных: `collect(cfg, src, ctx) -> dict` и необязательный
-  `ACTIONS {имя: fn(cfg, src, args)}`. Подключение, порядок и выключение — `sources` в конфиге;
-  `every_sec` — собирается в своём потоке не чаще. Новый раздел панели = новый модуль + вид в `web/app.js`.
+- Источник данных — `collect(cfg, src, ctx) -> dict` и необязательный `ACTIONS {имя: fn(cfg, src, args)}`.
+  Ядро — `monitor/sources/tabs.py`; остальное — модули `modules/<имя>/` (`module.json` + `source.py`):
+  sessions, claims, usage, keepwarm, board. Манифест: `name`, `api` (= `CORE_API` ядра), `version`, `title`,
+  `after` (чей `ctx` нужен), `every_sec` (свой поток), `settings` (умолчания; поверх — `sources.<имя>` конфига,
+  `enabled: false` — выключить). Ещё каталоги — `module_dirs`; одно имя дважды — ошибка, кроме `replaces`.
+  Сломанный модуль не валит панель: ошибка в `task.py modules` и `state.sources.core.modules`; 5 ошибок
+  подряд — пауза 10 мин; `POST /api/core/reload` — пересобрать реестр. Новый раздел = модуль + вид в `web/app.js`.
 - `server.py` — цикл сборки раз в `tick_sec`, `GET /state.json`, SSE `/events` (номер ревизии
   при изменении), `POST /api/<источник>/<действие>`.
 - `web/app.js` — `patch()` по ключам: перерисовывается только изменившаяся строка, порядок —
@@ -51,7 +55,7 @@ session-board, handoff в `~/.claude/skills`, добавляет в `~/.claude/s
 UserPromptSubmit (`task.py hook`, `session-board.js`), разрешение на `task.py` и `SESSION_BOARD`
 (доска машины без `.dev.env`). Повторный запуск безопасен.
 
-## Доска объявлений (`monitor/sources/board.py`)
+## Доска объявлений (`modules/board`)
 
 Вкладка «Доска»: действующие объявления всех `%LOCALAPPDATA%/1c-ib-queue/*.board` (формат и срез
 последних — как в навыке session-board) и форма «Объявить» от лица `sources.board.owner`. Пишет
@@ -106,7 +110,7 @@ done` (подтвердить и закрыть; пункт без ответа 
   и `file_roots`; HTML — с CSP sandbox. `.md` рендерится на странице (marked + DOMPurify в `web/`),
   отдельной вкладкой — `/?doc=<путь>`.
 
-Захват задач (`task.py next` / `release`, `monitor/sources/claims.py`): вкладки — `sources.claims.tabs`
+Захват задач (`task.py next` / `release`, `modules/claims`): вкладки — `sources.claims.tabs`
 (пусто — все, кроме `ideas`); живость — по реестру `~/.claude/sessions`, сессия вне реестра (другой агент,
 `TASK_SESSION`) жива `sources.claims.ttl_sec` (30 мин) с продлением при каждом вызове `task.py`.
 

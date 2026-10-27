@@ -36,17 +36,9 @@
     "keepwarm": true
   },
 
+  "_modules": "Модули — каталоги с module.json в modules/ панели и в module_dirs (команда, личные). Умолчания модуля — settings его манифеста; здесь и в личном файле — только отличия: sources.<имя> (enabled: false — выключить). Список и ошибки — task.py modules.",
+  "module_dirs": [],
   "sources": {
-    "tabs":     { "enabled": true },
-    "claims":   { "enabled": true, "tabs": [], "ttl_sec": 1800,
-                  "_comment": "tabs — вкладки для task.py next, пусто — все, кроме ideas; ttl_sec — жизнь захвата сессии вне реестра ~/.claude/sessions (продлевается каждым вызовом task.py)" },
-    "sessions": { "enabled": true, "registry": "~/.claude/sessions", "transcripts": "~/.claude/projects",
-                  "bind": ["claim", "handoff_session", "cwd"] },
-    "usage":    { "enabled": true, "every_sec": 300, "credentials": "~/.claude/.credentials.json" },
-    "keepwarm": { "enabled": true, "off_dir": "%LOCALAPPDATA%/keepwarm/off", "state_dir": "%LOCALAPPDATA%/keepwarm",
-                  "config": "../keepwarm/keepwarm.config.json",
-                  "_comment": "config — общий график keepwarm; личный (правится в «Сессиях») — state_dir/config.json поверх него" },
-    "board":    { "enabled": true, "dir": "%LOCALAPPDATA%/1c-ib-queue", "skill": "../../skills/session-board",
-                  "owner": "владелец", "key": "user", "default": "", "history": 100 }
+    "tabs": { "enabled": true }
   }
 }
