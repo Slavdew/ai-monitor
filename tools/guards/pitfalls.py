@@ -175,16 +175,38 @@ def is_error(ev):
 
 def cmd_hook():
     try:
-        ev = json.loads(sys.stdin.buffer.read().decode('utf-8', 'replace') or '{}')
+        ev = json.loads(sys.stdin.buffer.read().decode('utf-8-sig', 'replace') or '{}')
         if not is_error(ev):
             return 0
         tool = ev.get('tool_name', '')
         out = text_of(ev.get('error')) or text_of(ev.get('tool_response'))
+        if re.fullmatch(r'Exit code \d+', out.strip()):
+            out = from_transcript(ev.get('transcript_path'), ev.get('tool_use_id')) or out
         append([record(tool, input_text(tool, ev.get('tool_input') or {}), out, 'hook', session=ev.get('session_id', ''),
                        agent=ev.get('agent_type') or ev.get('agent_id') or 'main', cwd=ev.get('cwd', ''))])
     except Exception:   # журнал не должен мешать работе
         pass
     return 0
+
+
+def from_transcript(path, tu_id, tail=2_000_000):
+    """Полный вывод вызова из хвоста транскрипта: в PostToolUseFailure у Bash поле error — только «Exit code N»
+    (зонд 28.10 на `false`; приходит ли туда stderr у настоящих ошибок — не проверено)."""
+    if not path or not tu_id or not os.path.exists(path):
+        return ''
+    with open(path, 'rb') as f:
+        f.seek(max(0, os.path.getsize(path) - tail))
+        lines = f.read().decode('utf-8', 'replace').splitlines()
+    for line in reversed(lines):
+        if tu_id not in line:
+            continue
+        try:
+            for c in json.loads(line).get('message', {}).get('content', []):
+                if isinstance(c, dict) and c.get('tool_use_id') == tu_id:
+                    return text_of(c.get('content'))
+        except (ValueError, AttributeError):
+            continue
+    return ''
 
 
 def log_guard(rule, tool, inp, cwd='', session=''):
