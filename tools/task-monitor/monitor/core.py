@@ -81,13 +81,20 @@ def write_json(path, data):
     os.replace(tmp, path)
 
 
+PERSONAL = '%LOCALAPPDATA%/claude-task-monitor/settings.json'
+
+
 def load_config():
-    """config.default.json, поверх — личный файл по ссылке из config.local.json (вне git)."""
+    """config.default.json, поверх — личный файл (A7): ссылка из config.local.json (вне git), иначе
+    TASK_MONITOR_SETTINGS, иначе %LOCALAPPDATA%/claude-task-monitor/settings.json, если он есть."""
     cfg = read_json(os.path.join(HOME, 'config.default.json'), {})
     local = read_json(os.path.join(HOME, 'config.local.json'), {})
     tabs_base = HOME   # относительные корни — от файла, где вкладки объявлены
-    if local.get('settings'):
-        path = expand(local['settings'])
+    path = local.get('settings') or os.environ.get('TASK_MONITOR_SETTINGS') or ''
+    if not path and os.path.exists(expand(PERSONAL)):
+        path = PERSONAL
+    if path:
+        path = expand(path)
         personal = read_json(path, {})
         cfg = merge(cfg, personal)
         if 'tabs' in personal:

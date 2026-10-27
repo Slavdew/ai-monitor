@@ -75,9 +75,12 @@ def set_session(cfg, src, args):
     _, sess = _dirs(src)
     out = {}
     if int(args.get('pings') or 0) > 0:
-        out['pings'] = int(args['pings'])
+        out['pings'] = min(int(args['pings']), 48)
     if args.get('until'):
-        out['until'] = int(args['until'])
+        until = int(args['until'])
+        if not 0 < until - time.time() * 1000 <= 24 * 3600 * 1000:   # свой срок — в пределах суток: не «навсегда»
+            raise ValueError('срок — в ближайшие 24 ч')
+        out['until'] = until
     if args.get('handoff') in (True, False):
         out['handoff'] = args['handoff']
     path = os.path.join(sess, f'{sid}.json')
@@ -86,6 +89,20 @@ def set_session(cfg, src, args):
     elif os.path.exists(path):
         os.remove(path)
     return {'ok': True}
+
+
+def _graph_value(k, v):
+    """Значение графика того типа, что ждёт keepwarm-gate.js: иначе шлюз упал бы и пропустил пинги (аудит 27.10)."""
+    hm = lambda x: isinstance(x, str) and re.fullmatch(r'([01]?\d|2[0-3]):[0-5]\d', x)
+    if k == 'workdayHours' and isinstance(v, (int, float)) and 1 <= v <= 16:
+        return v
+    if k == 'startWindow' and isinstance(v, list) and len(v) == 2 and all(hm(x) for x in v):
+        return v
+    if k == 'offDays' and isinstance(v, list) and all(isinstance(x, int) and 0 <= x <= 6 for x in v):
+        return sorted(set(v))
+    if k == 'autoStart' and isinstance(v, bool):
+        return v
+    raise ValueError(f'{k}: недопустимое значение')
 
 
 def set_graph(cfg, src, args):
@@ -98,7 +115,7 @@ def set_graph(cfg, src, args):
             if args[k] is None:
                 mine.pop(k, None)
             else:
-                mine[k] = args[k]
+                mine[k] = _graph_value(k, args[k])
     write_json(path, mine)
     return {'ok': True}
 

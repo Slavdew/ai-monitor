@@ -1,4 +1,4 @@
-"""Подключить панель задач и доску объявлений к Claude Code на этой машине (повторный запуск безопасен).
+r"""Подключить панель задач и доску объявлений к Claude Code на этой машине (повторный запуск безопасен).
 
   py install.py [--board home] [--bin <папка>] [--name tm] [--clean <settings.json проекта> ...]
   py install.py --check [<проект> ...]   только отчёт о копиях навыков (дубли, устаревшие)
@@ -23,7 +23,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 CLAUDE = os.path.join(os.path.expanduser('~'), '.claude')
 TASK = os.path.join(HERE, 'task.py')
-HOOKS = [f'py "{TASK}" hook']   # один хук-диспетчер: ответы владельца и hook.py модулей (доска — modules/board)
+PY = sys.executable   # тот Python, которым ставили: py и python есть не на каждой машине вместе
+HOOKS = [f'"{PY}" "{TASK}" hook']   # один хук-диспетчер: ответы владельца и hook.py модулей (доска — modules/board)
 REPLACED = ('session-board.js',)   # прежние хуки, которые диспетчер заменил: снимаются
 ALLOW = [f'Bash(python {TASK.replace(os.sep, "/")} *)', f'PowerShell(python {TASK} *)']
 OLD = ('plan-board\\plan.py', 'task-monitor\\task.py')
@@ -43,14 +44,28 @@ def save(path, d):
         f.write('\n')
 
 
+SKILL_TASK = '<repo>/tools/task-monitor/task.py'   # путь в SKILL.md репозитория
+
+
+def fix_paths(path, data=None):
+    """Путь к task.py в навыке — этой машины, не владельца (копия навыка ставится сюда же)."""
+    if data is not None:
+        return data.replace(SKILL_TASK.encode(), TASK.replace(os.sep, '/').encode())
+    if os.path.exists(path):
+        with open(path, 'rb') as f:
+            b = f.read()
+        with open(path, 'wb') as f:
+            f.write(fix_paths(path, b))
+
+
 def wrapper(bin_dir, name):
     """tm → python task.py: два файла (Git Bash не находит .cmd без расширения), папка — в PATH пользователя."""
     os.makedirs(bin_dir, exist_ok=True)
     fwd = TASK.replace(os.sep, '/')
     with open(os.path.join(bin_dir, name + '.cmd'), 'w', encoding='utf-8', newline='\r\n') as f:
-        f.write(f'@python "{TASK}" %*\n')
+        f.write(f'@"{PY}" "{TASK}" %*\n')
     with open(os.path.join(bin_dir, name), 'w', encoding='utf-8', newline='\n') as f:
-        f.write(f'#!/bin/sh\nexec python "{fwd}" "$@"\n')
+        f.write(f'#!/bin/sh\nexec "{PY.replace(os.sep, "/")}" "{fwd}" "$@"\n')
     if sys.platform != 'win32':
         os.chmod(os.path.join(bin_dir, name), 0o755)
         return False
@@ -71,7 +86,7 @@ def wrapper(bin_dir, name):
     return True
 
 
-def tree_hash(d):
+def tree_hash(d, fix=False):
     """Хеш содержимого каталога навыка (пути и байты, без __pycache__) — сравнить копию с репозиторием."""
     import hashlib
     h = hashlib.sha1()
@@ -81,7 +96,8 @@ def tree_hash(d):
             p = os.path.join(root, f)
             h.update(os.path.relpath(p, d).replace(os.sep, '/').encode())
             with open(p, 'rb') as fh:
-                h.update(fh.read())
+                b = fh.read()
+            h.update(fix_paths(p, b) if fix and f == 'SKILL.md' else b)   # копия навыка — с путём этой машины
     return h.hexdigest()[:10]
 
 
@@ -90,7 +106,7 @@ def check(projects):
     две копии значат, что работает личная; копия, отличная от репозитория, — устарела или правлена на месте."""
     bad = 0
     for name in SKILLS:
-        ref = tree_hash(os.path.join(REPO, 'skills', name))
+        ref = tree_hash(os.path.join(REPO, 'skills', name), fix=True)
         places = [('личная', os.path.join(CLAUDE, 'skills', name))] + \
                  [(f'проект {p}', os.path.join(p, '.claude', 'skills', name)) for p in projects]
         found = [(k, p) for k, p in places if os.path.isdir(p)]
@@ -124,13 +140,15 @@ def main():
     for name in SKILLS:
         dst = os.path.join(CLAUDE, 'skills', name)
         shutil.copytree(os.path.join(REPO, 'skills', name), dst, dirs_exist_ok=True)
+        fix_paths(os.path.join(dst, 'SKILL.md'))
         print('навык:', dst)
 
     path = os.path.join(CLAUDE, 'settings.json')
     d = load(path)
     groups = d.setdefault('hooks', {}).setdefault('UserPromptSubmit', [])
     for g in groups:   # прежний хук доски на Node — его работу делает диспетчер
-        g['hooks'] = [h for h in g.get('hooks', []) if not any(r in h.get('command', '') for r in REPLACED)]
+        g['hooks'] = [h for h in g.get('hooks', []) if not any(r in h.get('command', '') for r in REPLACED)
+                      and not (TASK in h.get('command', '') and h.get('command') not in HOOKS)]   # прежний запуск того же хука
     groups[:] = [g for g in groups if g.get('hooks')]
     have = {h.get('command') for g in groups for h in g.get('hooks', [])}
     new = [{'type': 'command', 'command': c, 'timeout': 5} for c in HOOKS if c not in have]

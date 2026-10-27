@@ -213,7 +213,8 @@ function md(text, inline, i) {
   if (!window.marked || !window.DOMPurify) return esc(text);
   const html = DOMPurify.sanitize(inline ? marked.parseInline(String(text)) : marked.parse(String(text)))
     .replace(/<h[1-4]>/g, '<h5>').replace(/<\/h[1-4]>/g, '</h5>');
-  return linkPaths(html.replace(/<code>([^<]*)<\/code>/g, '<code class="copy" data-copy="$1" tabindex="0" title="Скопировать">$1</code>'), i?.paths);
+  // текст из DOMPurify экранирует & < >, но не кавычки — в атрибут без &quot; кавычка закрыла бы его (XSS, аудит 27.10)
+  return linkPaths(html.replace(/<code>([^<]*)<\/code>/g, (m, t) => `<code class="copy" data-copy="${t.replace(/"/g, '&quot;')}" tabindex="0" title="Скопировать">${t}</code>`), i?.paths);
 }
 const fileLink = (a, abs) => {
   a.href = viewUrl(abs); a.target = '_blank'; a.rel = 'noopener'; a.title = abs; a.className = 'flink';

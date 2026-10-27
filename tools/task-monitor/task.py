@@ -29,7 +29,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from monitor.core import load_config, log_call, model_on, module_hooks, module_on, module_settings, modules, read_json, require, session_id, sources  # noqa: E402
+from monitor.core import in_tab_root, load_config, log_call, model_on, module_hooks, module_on, module_settings, modules, read_json, require, session_id, sources  # noqa: E402
 from monitor import questions  # noqa: E402
 from monitor.sources import tabs  # noqa: E402
 
@@ -81,7 +81,7 @@ TOPICS = {
     'api': """api — действие страницы через запущенный сервер, как кнопкой (тот же журнал, страницы обновятся сразу)
 
   api                               список действий
-  api tabs draft dir=<каталог> n=5 text="…"     n — номер пункта с 1 (index — с 0, как у страницы)
+  api tabs field dir=<каталог> field=stage value="…"     действие страницы; ответы, черновики и просьбы владельца — только со страницы (403)
 Значения — строки; JSON только явный: null true false […] {…}. dir и пути — всегда строки.
 Что видно в окне — node <панель>/ui.mjs card:<id> text:<css> count:<css> shot:<имя> (безголовый Edge,
 строка на шаг; node ui.mjs — список шагов). Щелчки настоящие: «Отправить» отправит.""",
@@ -539,6 +539,9 @@ def run(cfg, a):
             t['plan'] = t.get('plan', []) + [{'text': x, 'status': 'todo'} for x in a.plan]
         t = tabs.update_task(cfg, d, fn)
         print(f'ok {t["id"]}')
+        if not in_tab_root(cfg, d):   # задача есть, но панель и команды по id её не увидят
+            roots = '; '.join(x['root'] for x in cfg.get('tabs', []))
+            print(f'предупреждение: {d} вне корней вкладок — в панели её не будет; заводить внутри: {roots}')
     elif a.cmd in ('next', 'release', 'take'):
         sid = session_id()
         if not sid:

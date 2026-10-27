@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from monitor.core import HOME, allowed_file, in_tab_root, load_config, log_call, module_on, modules, now_ms, sources  # noqa: E402
 
 FAILS, PAUSE_SEC = 5, 600   # ошибок модуля подряд до паузы, длина паузы
+OWNER_ONLY = {('tabs', 'draft'), ('tabs', 'submit'), ('tabs', 'request')}
 
 WEB = os.path.join(HOME, 'web')
 TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css'}
@@ -196,8 +197,15 @@ class Handler(BaseHTTPRequestHandler):
         parts = self.path.strip('/').split('/')
         if len(parts) != 3 or parts[0] != 'api':
             return self._send(404, b'{}')
+        # слова владельца (ответы, черновики, просьбы) — только со страницы: браузер ставит Origin на POST,
+        # curl и task.py api — нет. Иначе агент мог бы «ответить» себе от имени владельца (аудит 27.10)
+        if (parts[1], parts[2]) in OWNER_ONLY and self.headers.get('Origin') is None:
+            return self._send(403, json.dumps({'error': 'действие владельца — только со страницы панели'}, ensure_ascii=False).encode())
+        size = int(self.headers.get('Content-Length', 0))
+        if size > 1 << 20:
+            return self._send(413, b'{"error": "body"}')
         try:
-            args = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))) or b'{}')
+            args = json.loads(self.rfile.read(size) or b'{}')
             res = hub.act(parts[1], parts[2], args)
             self._send(200, json.dumps(res, ensure_ascii=False).encode())
         except Exception as e:

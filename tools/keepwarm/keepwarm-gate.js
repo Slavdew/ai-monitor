@@ -292,7 +292,11 @@ if (process.argv[2] === '--prompt') {
     try {
       gate(JSON.parse(input || '{}'));
     } catch (err) {
-      // ошибка хука не должна мешать вводу
+      // ошибка хука не должна мешать вводу пользователя; но запрос таймера при ошибке гасим —
+      // иначе испорченные настройки пропускали бы пинг к модели каждые 30 мин
+      if (input.includes(`"prompt":"${PREFIX}`) || input.includes(`"prompt": "${PREFIX}`)) {
+        process.stdout.write(JSON.stringify({ decision: 'block', reason: 'keepwarm: ошибка шлюза' }));
+      }
     }
   });
 }
