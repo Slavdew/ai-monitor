@@ -109,6 +109,7 @@ def read_item(dir_, tab, cfg):
         'id': task.get('id') or hmeta.get('task') or os.path.basename(dir_),
         'tab': tab['id'], 'dir': dir_,
         'title': task.get('title') or hmeta.get('title') or title or os.path.basename(dir_),
+        'short': task.get('short', ''),   # имя вкладки карточки — задаёт владелец в панели
         'project': task.get('project') or hmeta.get('project') or '',
         'goal': task.get('goal') or goal,
         'desc': task.get('desc', ''),
@@ -366,7 +367,7 @@ def _split_add(s):
     return s, {}
 
 
-TASK_FIELDS = ('title', 'project', 'goal', 'desc', 'next', 'stage', 'priority', 'health', 'blocked', 'risk', 'status', 'plan_mode')
+TASK_FIELDS = ('title', 'short', 'project', 'goal', 'desc', 'next', 'stage', 'priority', 'health', 'blocked', 'risk', 'status', 'plan_mode')
 LINK_LISTS = ('related', 'blocks', 'blocked_by', 'docs', 'artifacts')   # links.parent — строка
 
 

@@ -773,7 +773,7 @@ function views() {
     const members = (src('tabs').tabs || []).filter((x) => x.group === t.group);
     tabs.push({ id: 'grp:' + t.group, title: t.group, render: () => renderGroup(members) });
   }
-  const opened = cards.map((ref) => ({ id: 'card:' + ref, title: ref.split('|')[1], card: ref, render: () => renderCard(ref) }));
+  const opened = cards.map((ref) => ({ id: 'card:' + ref, title: tabName(ref), card: ref, render: () => renderCard(ref) }));
   const board = 'board' in state.sources ? [{ id: 'board', title: 'Доска', render: renderBoard }] : [];
   const inbox = pending().length ? [{ id: 'inbox', title: 'Ждут вас', render: renderInbox }] : [];
   return [...inbox, ...tabs, { id: 'kanban', title: 'Канбан', render: renderKanban }, { id: 'sessions', title: 'Сессии', render: renderSessions }, ...board, ...opened];
@@ -823,7 +823,7 @@ function render() {
   patch($('#nav'), vs.map((v) => ({
     key: v.id,
     cls: v.card ? 'cardwrap' : '',   // × карточки — своя кнопка рядом, не внутри кнопки вкладки
-    html: `<button class="${v.id === view ? 'on' : ''}${v.card ? ' cardtab' : ''}" data-view="${esc(v.id)}"${v.id === view ? ' aria-current="page"' : ''}>${esc(v.title)}${v.wait ? (v.id === 'inbox' ? ` <b class="wbadge" title="Вопросы ждут вашего ответа">${v.wait}</b>` : ' <b class="wdot" title="Здесь есть вопросы к вам">•</b>') : ''}</button>${v.card ? `<button class="x" data-act="close" data-ref="${esc(v.card)}" title="Закрыть карточку" aria-label="Закрыть карточку ${esc(v.title)}">×</button>` : ''}`,
+    html: `<button class="${v.id === view ? 'on' : ''}${v.card ? ' cardtab' : ''}" data-view="${esc(v.id)}"${v.card ? ` title="${esc(cardTip(v.card))}"` : ''}${v.id === view ? ' aria-current="page"' : ''}>${esc(v.title)}${v.wait ? (v.id === 'inbox' ? ` <b class="wbadge" title="Вопросы ждут вашего ответа">${v.wait}</b>` : ' <b class="wdot" title="Здесь есть вопросы к вам">•</b>') : ''}</button>${v.card ? `<button class="x" data-act="close" data-ref="${esc(v.card)}" title="Закрыть карточку" aria-label="Закрыть карточку ${esc(v.title)}">×</button>` : ''}`,
   })));
   const v = vs.find((x) => x.id === view);
   const roots = (src('tabs').tabs || []).map((t) => t.root);   // ошибки корней показывает раздел вкладки
@@ -1005,6 +1005,35 @@ async function pull() {
 }
 
 function go(v) { view = v; store.set('view', view); if (decodeURIComponent(location.hash.slice(1)) !== v) history.pushState(null, '', '#' + v); render(); scrollTo(0, 0); }
+// имя вкладки карточки: своё короткое (поле short — задаёт владелец), иначе начало названия, иначе id
+function tabName(ref) {
+  const i = findItem(ref), id = ref.split('|')[1];
+  if (!i) return id;
+  if (i.short) return i.short;
+  const t = String(i.title || id);
+  return t.length > 24 ? t.slice(0, 23).trimEnd() + '…' : t;
+}
+const cardTip = (ref) => { const i = findItem(ref); return (i ? i.title + ' · ' : '') + ref.split('|')[1] + '\nДвойной щелчок — переименовать вкладку'; };
+// переименование — поле прямо во вкладке: Enter сохранить, Esc отменить, пусто — вернуть название задачи
+function renameTab(ref) {
+  const btn = document.querySelector(`nav .cardtab[data-view="${CSS.escape('card:' + ref)}"]`), i = findItem(ref);
+  if (!btn || !i) return;
+  const inp = document.createElement('input');
+  inp.className = 'tabname'; inp.value = i.short || ''; inp.placeholder = String(i.title || '').slice(0, 40);
+  inp.title = 'Имя вкладки: Enter — сохранить, Esc — отменить, пусто — название задачи';
+  inp.style.width = Math.max(8, (inp.value || inp.placeholder).length + 1) + 'ch';
+  btn.replaceChildren(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    if (save && inp.value.trim() !== (i.short || '')) await post('tabs', 'field', { dir: i.dir, field: 'short', value: inp.value.trim() });
+    render();
+  };
+  inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); });
+  inp.addEventListener('click', (e) => e.stopPropagation());
+  inp.addEventListener('blur', () => finish(true));
+}
+document.addEventListener('dblclick', (e) => { const b = e.target.closest('nav .cardtab'); if (b) renameTab(b.dataset.view.slice(5)); });
 function openCard(ref) { if (!cards.includes(ref)) { cards.push(ref); store.set('cards', cards); } go('card:' + ref); }
 // «Назад» и «Вперёд» браузера: вид — в адресе
 addEventListener('popstate', () => {
@@ -1058,7 +1087,7 @@ function ctxItems(t) {
     const i = findItem(task.dataset.ref);
     if (!i) return null;
     const pr = [1, 2, 3, 4].map((n) => mi('prio', ['срочно', 'важно', 'обычно', 'потом'][n - 1], ` data-v="${n}"${(i.priority || 3) === n ? ' class="cur"' : ''}`)).join('');
-    return { ctx: task, html: mi('card', 'Открыть карточку', '', 'Enter') + (nWait(i) ? mi('answer', `Ответить на вопросы (${nWait(i)})`) : '')
+    return { ctx: task, html: mi('card', 'Открыть карточку', '', 'Enter') + mi('rename', 'Переименовать вкладку…') + (nWait(i) ? mi('answer', `Ответить на вопросы (${nWait(i)})`) : '')
       + (i.resume ? mi('copy', '⧉ Продолжить', ` data-v="${esc(i.resume)}"`) : '') + mi('copy', '⧉ id', ` data-v="${esc(i.id)}"`)
       + mi('copy', '⧉ Каталог', ` data-v="${esc(i.dir)}"`) + '<hr><div class="mh">Приоритет</div>' + pr
       + ((src('claims').list || {})[i.id] ? '<hr>' + mi('release', 'Отпустить захват') : ''), ref: task.dataset.ref, i };
@@ -1073,6 +1102,7 @@ async function ctxPick(b, c) {
   else if (m === 'doc') openDoc(v);
   else if (m === 'tab') open(viewUrl(v), '_blank', 'noopener');
   else if (m === 'card') openCard(c.ref);
+  else if (m === 'rename') { openCard(c.ref); renameTab(c.ref); }
   else if (m === 'answer') { ctab[c.ref] = 'q'; store.set('ctab', ctab); openCard(c.ref); }
   else if (m === 'prio') await post('tabs', 'field', { dir: c.i.dir, field: 'priority', value: v });
   else if (m === 'release') await post('claims', 'release', { task: c.i.id });

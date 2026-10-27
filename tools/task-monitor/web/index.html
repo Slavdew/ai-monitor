@@ -61,7 +61,8 @@ nav .cardwrap { border:1px solid color-mix(in srgb, var(--acc) 35%, transparent)
 nav .cardwrap:has(.on) { border-color:var(--acc); background:var(--card) }
 nav > div:not(.cardwrap) + .cardwrap { margin-left:14px; position:relative }
 nav > div:not(.cardwrap) + .cardwrap::before { content:""; position:absolute; left:-9px; top:15%; bottom:15%; border-left:1px solid var(--line) }
-nav .cardtab, nav .cardtab.on { border:0; background:none; padding-right:2px; font-family:ui-monospace, Consolas, monospace; font-size:.92em }
+nav .cardtab, nav .cardtab.on { border:0; background:none; padding-right:2px; max-width:22em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+nav .tabname { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--acc); border-radius:4px; padding:0 4px; outline:0; max-width:30ch }
 nav .x { border:0; background:none; font:inherit; cursor:pointer; color:var(--mute); padding:2px 8px 2px 4px; border-radius:0 6px 6px 0; line-height:1 }
 nav .x:hover { color:var(--bad); background:color-mix(in srgb, var(--bad) 12%, transparent) }
 .row { background:var(--card); border:1px solid var(--line); border-radius:8px; margin:6px 0; padding:8px 12px }
