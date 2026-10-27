@@ -168,6 +168,9 @@ function qaHtml(i, p, k, edit) {
   return `<div class="qa">${advice}${was}${answers}${asked}${status}${bar}
     <textarea class="draft" rows="1" data-act="draft" ${at} placeholder="${esc(ph)}">${esc(draft)}</textarea></div>`;
 }
+// поле ответа — высотой по тексту (весь ответ виден и после ухода из поля)
+function fitHeight(el) { if (!el.offsetParent) return; el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; }
+addEventListener('resize', () => document.querySelectorAll('textarea.draft').forEach(fitHeight));   // другая ширина — другой перенос
 // ответ набран, но не отправлен: строка вопроса подсвечена «К отправке» (на вводе — сразу, без перерисовки)
 const hasDraft = (i, p, k) => { const key = i.dir + '|' + k; return !!((drafts[key] ?? p.draft ?? '').trim() || optOf(p, key)); };
 // выбранный вариант: несохранённое — drafts[«…|o»]; старая галочка «проще» (rephrase_draft) — как вариант «проще»
@@ -830,6 +833,7 @@ function render() {
   $('#main').classList.toggle('split', !!side);
   patch($('#list'), [...errs, ...rows]);
   patch($('#side'), side || []);
+  document.querySelectorAll('textarea.draft').forEach(fitHeight);   // перерисованное поле — снова по тексту, не в одну строку
   renderLimits();
   tickAgo();
 }
@@ -966,7 +970,7 @@ document.addEventListener('input', (e) => {
   drafts[el.dataset.key] = el.value;
   const li = el.closest('li.q');
   if (li) li.classList.toggle('drafted', !!el.value.trim() || !!li.querySelector('.qopt.on'));
-  if (el.tagName === 'TEXTAREA') { el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; }
+  if (el.tagName === 'TEXTAREA') fitHeight(el);
   clearTimeout(draftTimers[el.dataset.key]);
   draftTimers[el.dataset.key] = setTimeout(() => saveDraft(el), 1000);
 });
