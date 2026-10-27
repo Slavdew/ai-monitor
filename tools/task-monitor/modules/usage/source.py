@@ -24,8 +24,9 @@ def collect(cfg, src, ctx):
     if not data or not data.get('limits'):
         seen = read_json(os.path.join(cfg['state_dir'], 'statusline-seen.json'), None)
         why = ('строка состояния вызывалась, но лимитов не передала (только Pro и Max, после первого ответа)' if seen
-               else 'строка состояния ещё не вызывалась: она подхватывается при запуске сессии — перезапустите '
-                    'сессию после install.py; окно VS Code может её не запускать, тогда лимиты придут от сессии в терминале')
+               # проверено 28.10: команда исправна, но окно Claude в VS Code строку состояния не вызывает
+               else 'строка состояния ещё не вызывалась: окно Claude в VS Code её не запускает — лимиты приходят от '
+                    'сессии Claude в терминале (claude в PowerShell), после первого ответа в ней')
         return {'empty': True, 'note': why}
     limits = [dict(x, percent=0, reset=True) if _past(x.get('resets_at')) else x for x in data['limits']]
     return {'limits': limits, 'ok_at': data.get('ok_at')}
