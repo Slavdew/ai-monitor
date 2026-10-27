@@ -25,7 +25,8 @@ const pfilter = new Set(store.get('pfilter', []));
 const awaiting = (p) => p.status === 'wait' && !(p.answers || []).length && !p.rephrase;
 const nWait = (i) => (i.plan || []).filter(awaiting).length;
 // просьба владельца (пункт req) открыта, пока не сделана и не снята
-const openReq = (p) => p.req && p.status !== 'wait' && p.state !== 'done' && p.state !== 'skip';
+// отложенная просьба — не открытая: в плане под «отложено», в счёт «Просьбы» не входит
+const openReq = (p) => p.req && p.status !== 'wait' && !['done', 'skip', 'later'].includes(p.state);
 const nReq = (i) => (i.plan || []).filter(openReq).length;
 // подписи статусов плана: коды остаются в данных и CLI, на странице — слова (ui.labels в конфиге)
 const label = (st) => (state.ui?.labels || {})[st] || st;
@@ -511,7 +512,7 @@ function renderGroup(tabs) {
   for (const t of shownTabs) {
     const r = renderTab(t, shownTabs.length > 1);
     rows.push(...r.rows);
-    side = side && side[0].key !== 'pv-empty' ? side : r.side;
+    side = side && side.some((x) => x.key.startsWith('pv:')) ? side : r.side;
   }
   return { rows, side };
 }
@@ -563,8 +564,10 @@ function renderTab(tab, sectioned) {
   // ошибку корня уже показала строка выше — второй раз не повторять
   if (!all.length && !(src('tabs').errors || []).some((e) => e.includes(tab.root))) rows.push({ key: 'empty:' + tab.id, cls: 'empty', html: 'Пусто' });
   const picked = !narrow && items.find((i) => i.tab + '|' + i.id === sel[view]);
-  const side = picked ? [{ key: 'pv:' + picked.id, cls: 'preview', html: taskView(picked, 'preview') }]
-    : [{ key: 'pv-empty', cls: 'preview empty', html: 'Выберите задачу — подробности будут здесь' }];
+  // шапка — вровень с вкладками списка, чтобы предпросмотр начинался там же, где первая строка
+  const head = { key: 'pv-head', cls: 'subtabs pvhead', html: '<span class="subtab">Предпросмотр</span>' };
+  const side = picked ? [head, { key: 'pv:' + picked.id, cls: 'preview', html: taskView(picked, 'preview') }]
+    : [head, { key: 'pv-empty', cls: 'sess pv-empty', html: 'Выберите задачу в списке' }];
   return { rows, side };
 }
 
