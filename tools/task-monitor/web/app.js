@@ -981,7 +981,7 @@ function renderLimits() {
   const rows = (u.limits || []).map((l) => ({
     key: l.kind + (l.label || ''), cls: 'lim ' + (l.severity || ''),
     // полоска заполнения — видно, сколько осталось, не читая цифр; сброс — в подсказке
-    html: `<span title="${l.resets_at ? 'Сброс ' + esc(new Date(l.resets_at).toLocaleString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : ''}">${esc(l.label)} <b>${l.percent ?? '—'}%</b>
+    html: `<span title="${l.reset ? 'Окно сброшено — новые цифры придут с ответом в любой сессии' : l.resets_at ? 'Сброс ' + esc(new Date(l.resets_at).toLocaleString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : ''}">${esc(l.label)} <b>${l.percent ?? '—'}%</b>
       <span class="lbar" aria-hidden="true"><i style="width:${Math.min(100, Math.max(0, +l.percent || 0))}%"></i></span></span>`,
   }));
   const hhmm = (ms) => new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
