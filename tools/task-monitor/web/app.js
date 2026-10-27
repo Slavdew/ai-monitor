@@ -245,7 +245,8 @@ const submitInner = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-a
 const submitHtml = (i) => `<div class="qsubmit" data-dir="${esc(i.dir)}">${submitInner(i)}</div>`;
 function refreshSubmit(dir) {
   const i = items().find((x) => x.dir === dir);
-  if (i) document.querySelectorAll(`.qsubmit[data-dir="${CSS.escape(dir)}"]`).forEach((el) => { el.innerHTML = submitInner(i); });
+  const html = i && submitInner(i);   // только при изменении: пересозданная кнопка теряет щелчок
+  if (i) document.querySelectorAll(`.qsubmit[data-dir="${CSS.escape(dir)}"]`).forEach((el) => { if (el._h !== html) { el.innerHTML = html; el._h = html; } });
 }
 const copyBtn = (text, what) => `<button class="btn" data-copy="${esc(text)}" title="${esc(text)}">⧉ ${what}</button>`;
 
@@ -1203,7 +1204,9 @@ document.addEventListener('input', (e) => {
 });
 // вариант ответа не забирает фокус у поля: иначе уход фокуса перерисует вопрос между нажатием и
 // отпусканием, кнопка под мышью сменится — и повторный щелчок (снять вариант) потеряется
-document.addEventListener('pointerdown', (e) => { if (e.button === 0 && e.target.closest('.qopt')) e.preventDefault(); });
+// то же у «Зафиксировать ответы»: уход фокуса из поля запускал отложенный render между нажатием и отпусканием,
+// строка с кнопкой пересоздавалась — первый щелчок терялся (владелец 28.10); черновики дописывает сам обработчик submit
+document.addEventListener('pointerdown', (e) => { if (e.button === 0 && e.target.closest('.qopt, [data-act="submit"], [data-act="submitall"]')) e.preventDefault(); });
 document.addEventListener('focusout', async (e) => {
   const el = e.target;
   if (el.dataset?.act === 'draft' && draftTimers[el.dataset.key]) await saveDraft(el);
