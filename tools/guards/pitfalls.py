@@ -6,7 +6,8 @@ r"""Журнал граблей: каждая ошибка инструмент�
 пересчитает старые записи по новому справочнику.
 
   pitfalls.py hook                         — хук PostToolUse/PostToolUseFailure: событие на stdin, всегда код 0
-  pitfalls.py report TOOL [файл|-]         — грабли без ошибки инструмента: сырой вывод (не пересказ) на stdin
+  pitfalls.py report TOOL [файл|-]         — грабли без ошибки инструмента: сырой вывод (не пересказ) файлом
+                                             или на stdin (из PowerShell — файлом: конвейер портит кириллицу)
   pitfalls.py stats [--since 2026-10-01] [--by id|tool|day|agent] [--top 30]
   pitfalls.py reclassify                   — пересчитать id всех записей по текущему CATALOG
   pitfalls.py backfill <каталог проектов>  — заполнить журнал из старых транскриптов (*.jsonl)
@@ -61,6 +62,8 @@ CATALOG = [
     ('cc.user-rejected', None, r"user doesn't want to proceed", None, 'отказ пользователя (шум)'),
     ('cc.input-invalid', None, r'InputValidationError', None, 'неверные параметры инструмента'),
     ('cc.timeout', 'Bash|PowerShell', r'Command timed out', None, 'команда дольше лимита'),
+    ('git.pathspec', None, r"pathspec '.*' did not match", None,
+     'git принял текст за путь (сообщение коммита аргументом, here-string PowerShell) — -F <файл>'),
     ('cc.hook-error', None, r'hook error', None, 'сбой хука (наш или чужой)'),
     ('test.red', None, r'(?m)Failed! - Failed: \d+|^AssertionError|^[1-9]\d* ошибок', None, 'красный тест — рабочий цикл, шум'),
     ('out.mojibake', None, '�{3}', None, 'вывод в не той кодировке (cp1251/cp866 в UTF-8)'),
@@ -193,7 +196,8 @@ def log_guard(rule, tool, inp, cwd='', session=''):
 
 
 def cmd_report(tool, path):
-    out = sys.stdin.read() if path in (None, '-') else open(path, encoding='utf-8', errors='replace').read()
+    raw = sys.stdin.buffer.read() if path in (None, '-') else open(path, 'rb').read()
+    out = raw.decode('utf-8-sig', 'replace')   # конвейер PowerShell отдаёт BOM; кириллицу надёжнее файлом
     r = record(tool, '', out, 'report', session=os.environ.get('CLAUDE_CODE_SESSION_ID', ''))
     append([r])
     print(r['id'] + (f" fp={r['fp']} «{r['sig']}»" if r['fp'] else ''))
