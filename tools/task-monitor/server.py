@@ -15,11 +15,11 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from monitor.core import HOME, load_config, log_call, now_ms, sources  # noqa: E402
+from monitor.core import HOME, allowed_file, load_config, log_call, now_ms, sources  # noqa: E402
 
 WEB = os.path.join(HOME, 'web')
 TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css'}
-TEXT_EXT = {'.md', '.markdown', '.txt', '.log', '.json', '.py', '.ps1', '.cmd', '.js', '.css'}
+TEXT_EXT = {'.md', '.markdown', '.txt', '.log', '.json', '.py', '.ps1', '.cmd', '.js', '.mjs', '.css', '.sh', '.cs', '.yml', '.yaml', '.xml', '.bsl'}
 
 
 def local_file(cfg, path):
@@ -28,14 +28,7 @@ def local_file(cfg, path):
     m = re.match(r'^/f/([A-Za-z])/(.+)$', path)
     if not m:
         return None
-    p = os.path.realpath(f'{m.group(1)}:\\' + unquote(m.group(2)).replace('/', '\\'))
-    n = os.path.normcase(p)
-    roots = [t['root'] for t in cfg.get('tabs', [])] + list(cfg.get('file_roots', []))
-    for r in roots:
-        r = os.path.normcase(os.path.realpath(r)).rstrip('\\')
-        if (n == r or n.startswith(r + '\\')) and os.path.isfile(p):
-            return p
-    return None
+    return allowed_file(cfg, f'{m.group(1)}:\\' + unquote(m.group(2)).replace('/', '\\'))
 
 
 class Hub:

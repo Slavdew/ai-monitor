@@ -7,7 +7,7 @@ import os
 import re
 import shlex
 
-from monitor.core import front_matter, locked, read_json, write_json
+from monitor.core import front_matter, locked, read_json, text_paths, write_json
 
 
 def _title_goal(text):
@@ -114,6 +114,7 @@ def read_item(dir_, tab, cfg):
         'desc': task.get('desc', ''),
         'health': task.get('health', ''),     # ok | risk | blocked — ставит агент
         'blocked': task.get('blocked', ''),   # почему стоит (внешнее: ИТ, руководитель)
+        'risk': task.get('risk', ''),         # в чём риск: панель показывает по щелчку на «риск»
         'priority': task.get('priority') or 3,
         'stage': stage,
         'stage_n': f'{secs.index(stage) + 1}/{len(secs)}' if stage in secs and len(secs) > 1 else '',
@@ -134,6 +135,12 @@ def read_item(dir_, tab, cfg):
     if os.path.exists(hpath):
         item['resume'] = hmeta.get('resume') or f'Продолжаем работу по {hpath}'
         item['stale'] = _stale(dir_, os.path.getmtime(hpath), it)
+    # пути к файлам в тексте — страница делает их ссылками; только те, что ведут на существующий файл
+    texts = [item[k] for k in ('goal', 'desc', 'next', 'current', 'blocked', 'risk', 'stage')]
+    for p in plan:
+        texts += [v for k, v in p.items() if isinstance(v, str) and k not in ('status', 'state', 'who', 'draft')]
+        texts += [a.get('text', '') if isinstance(a, dict) else str(a) for a in p.get('answers') or []]
+    item['paths'] = text_paths(cfg, [t for t in texts if t], dir_)
     return item
 
 
@@ -354,7 +361,7 @@ def _split_add(s):
     return s, {}
 
 
-TASK_FIELDS = ('title', 'project', 'goal', 'desc', 'next', 'stage', 'priority', 'health', 'blocked', 'status', 'plan_mode')
+TASK_FIELDS = ('title', 'project', 'goal', 'desc', 'next', 'stage', 'priority', 'health', 'blocked', 'risk', 'status', 'plan_mode')
 LINK_LISTS = ('related', 'blocks', 'blocked_by', 'docs', 'artifacts')   # links.parent — строка
 
 

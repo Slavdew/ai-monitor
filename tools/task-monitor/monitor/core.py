@@ -92,6 +92,47 @@ def load_config():
     return cfg
 
 
+def allowed_file(cfg, path):
+    """Полный путь файла, если он есть и лежит в корне вкладки или в file_roots, иначе None."""
+    p = os.path.realpath(path)
+    n = os.path.normcase(p)
+    for r in [t['root'] for t in cfg.get('tabs', [])] + list(cfg.get('file_roots', [])):
+        r = os.path.normcase(os.path.realpath(r)).rstrip('\\')
+        if (n == r or n.startswith(r + '\\')) and os.path.isfile(p):
+            return p
+    return None
+
+
+# пути к файлам в тексте задачи: C:\x\y.md, docs/a.md, `путь с пробелами`, [имя](путь), голое имя.md
+_ABS = r'[A-Za-z]:[\\/][^\s`\'"<>|*?«»()\[\]]+'
+_REL = r'(?<![\w./\\:-])(?:[\w.-]+[\\/])+[\w.-]+\.[A-Za-z0-9]{1,6}'
+_BARE = r'(?<![\w./\\:-])[\w-][\w.-]*\.(?:md|markdown|html?|txt|json|log|pdf|png|jpe?g|svg|py|ps1|js|mjs|cmd)\b'
+PATH_RE = re.compile(rf'`([^`\n]+)`|\]\(([^)\s]+)\)|({_ABS})|({_REL})|({_BARE})')
+
+
+def text_paths(cfg, texts, base):
+    """{как написано: полный путь} для путей из текстов, которые ведут на существующий разрешённый файл.
+    Относительный путь ищется от каталога задачи и его предков, затем от корней вкладок."""
+    bases, up = [], base
+    while up and up not in bases:
+        bases.append(up)
+        up = os.path.dirname(up)
+    bases += [t['root'] for t in cfg.get('tabs', [])]
+    out = {}
+    for text in texts:
+        for m in PATH_RE.finditer(text):
+            raw = next(g for g in m.groups() if g).rstrip('.,;:')
+            if raw in out or not re.search(r'\.[A-Za-z0-9]{1,6}$', raw):
+                continue
+            rel = raw.replace('/', '\\')
+            for b in [''] if re.match(r'[A-Za-z]:\\', rel) else bases:
+                p = allowed_file(cfg, os.path.join(b, rel) if b else rel)
+                if p:
+                    out[raw] = p
+                    break
+    return out
+
+
 def sources(cfg):
     """[(имя, настройки, модуль)] включённых источников в порядке конфига."""
     out = []

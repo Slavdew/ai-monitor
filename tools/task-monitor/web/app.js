@@ -141,12 +141,12 @@ const fmtTime = (ms) => new Date(ms).toLocaleString('ru-RU', { day: '2-digit', m
 // текст — свой ответ; с вариантом — дополнение к нему; «проще» + текст — что именно непонятно
 function qaHtml(i, p, k, edit) {
   const key = i.dir + '|' + k;
-  const answers = (p.answers || []).map((a) => `<div class="ans">${esc(a.text)} <span class="sess">· ${fmtTime(a.at)}</span></div>`).join('');
+  const answers = (p.answers || []).map((a) => `<div class="ans">${linkPaths(esc(a.text), i.paths)} <span class="sess">· ${fmtTime(a.at)}</span></div>`).join('');
   const status = p.seen === false ? '<span class="sess unread">✓ отправлено, ждёт агента</span>'
     : p.seen && (p.answers || []).length ? '<span class="sess ok">✓✓ принято агентом</span>' : '';
   const asked = p.rephrase ? `<div class="ans">Просьба перефразировать${p.rephrase.text !== 'проще' ? ': ' + esc(p.rephrase.text) : ''} <span class="sess">· ${fmtTime(p.rephrase.at)}</span></div>` : '';
   const was = p.was ? `<div class="sess was">было: <s>${esc(p.was)}</s></div>` : '';
-  const advice = p.note ? `<div class="advice"><span class="lbl">Совет агента</span> ${md(p.note, true)}</div>` : '';
+  const advice = p.note ? `<div class="advice"><span class="lbl">Совет агента</span> ${md(p.note, true, i)}</div>` : '';
   const at = `data-key="${esc(key)}" data-dir="${esc(i.dir)}" data-index="${k}"`;
   const draft = drafts[key] ?? p.draft ?? '';
   const opt = optOf(p, key);
@@ -193,7 +193,7 @@ function planRow(i, p, k, full, answer = full) {
     : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="ваша просьба">просьба</span> ' : ''}${md(p.text, true)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true)}</span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="ваша просьба">просьба</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length;
 const submitHtml = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Отправить Claude (${nDraftOf(i)})</button>
@@ -202,20 +202,79 @@ const copyBtn = (text, what) => `<button class="btn" data-copy="${esc(text)}" ti
 
 // Markdown в тексте задачи: полный — цель, описание, заметки; строчный — «Дальше», пункты, вопросы.
 // `код` копируется щелчком. marked/DOMPurify грузятся с defer — до них текст просто экранируется.
-function md(text, inline) {
+// i — задача: пути к файлам из i.paths (их нашёл и проверил сервер) становятся ссылками.
+function md(text, inline, i) {
   if (!text) return '';
   if (!window.marked || !window.DOMPurify) return esc(text);
   const html = DOMPurify.sanitize(inline ? marked.parseInline(String(text)) : marked.parse(String(text)))
     .replace(/<h[1-4]>/g, '<h5>').replace(/<\/h[1-4]>/g, '</h5>');
-  return html.replace(/<code>([^<]*)<\/code>/g, '<code class="copy" data-copy="$1" tabindex="0" title="скопировать">$1</code>');
+  return linkPaths(html.replace(/<code>([^<]*)<\/code>/g, '<code class="copy" data-copy="$1" tabindex="0" title="скопировать">$1</code>'), i?.paths);
+}
+const fileLink = (a, abs) => {
+  a.href = fileUrl(abs); a.target = '_blank'; a.rel = 'noopener'; a.title = abs; a.className = 'flink';
+  a.dataset.ctx = 'doc'; a.dataset.path = abs;
+  if (INPANEL.has(extOf(abs))) a.dataset.doc = abs;
+};
+function linkPaths(html, paths) {
+  const keys = Object.keys(paths || {}).sort((a, b) => b.length - a.length);
+  if (!keys.length) return html;
+  const box = document.createElement('template');
+  box.innerHTML = html;
+  box.content.querySelectorAll('a[href]').forEach((a) => { const abs = paths[a.getAttribute('href')]; if (abs) fileLink(a, abs); });
+  const alt = '(?<![\\w./\\\\-])(?:' + keys.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')';   // не хвост чужого пути
+  const re = new RegExp(alt, 'g'), has = new RegExp(alt);
+  const walk = document.createTreeWalker(box.content, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walk.nextNode()) if (!walk.currentNode.parentElement?.closest('a') && has.test(walk.currentNode.data)) nodes.push(walk.currentNode);
+  for (const n of nodes) {
+    const frag = document.createDocumentFragment();
+    let at = 0;
+    n.data.replace(re, (m, pos) => {
+      frag.append(n.data.slice(at, pos));
+      const a = document.createElement('a'); a.textContent = m; fileLink(a, paths[m]); frag.append(a);
+      at = pos + m.length;
+    });
+    frag.append(n.data.slice(at));
+    n.replaceWith(frag);
+  }
+  return box.innerHTML;
 }
 
 const PRIO = { 1: ['!1', 'bad', 'срочно'], 2: ['!2', 'wait', 'важно'], 3: null, 4: ['↓', '', 'потом'] };
 const prioTag = (i) => { const p = PRIO[i.priority]; return p ? `<span class="tag prio ${p[1]}" title="приоритет: ${p[2]}">${p[0]}</span>` : ''; };
-const stageTag = (i) => (i.stage ? `<span class="tag stage" title="этап${i.current ? ' · в работе: ' + esc(i.current) : ''}">${md(i.stage, true)}${i.stage_n ? ' ' + i.stage_n : ''}</span>` : '');
-// здоровье задачи (ставит агент): риск — оранжевым, стоит — красным с причиной; ok не рисуется
-const healthTag = (i) => (i.health === 'blocked' || i.blocked ? `<span class="tag bad" title="${esc(i.blocked || 'задача стоит')}">⛔ стоит${i.blocked ? ': ' + md(i.blocked, true) : ''}</span>`
-  : i.health === 'risk' ? '<span class="tag wait" title="есть риск не успеть или сделать не то">⚠ риск</span>' : '');
+// подсказка (title) — плоский текст: разметку Markdown снимаем, списки остаются строками
+const plain = (s) => String(s || '').replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, '$1$2').replace(/`([^`]+)`/g, '$1')
+  .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/^#+\s*/gm, '');
+const stageTag = (i) => (i.stage ? `<span class="tag stage" title="этап${i.current ? ' · в работе: ' + esc(plain(i.current)) : ''}">${md(i.stage, true, i)}${i.stage_n ? ' ' + i.stage_n : ''}</span>` : '');
+// здоровье задачи (ставит агент): риск — оранжевым, стоит — красным с причиной; ok не рисуется.
+// Щелчок — пояснение с причиной (поля risk / blocked) и кнопкой снять.
+const HEALTH = {
+  risk: ['⚠ риск', 'wait', 'Риск: агент считает, что задача может не успеть к сроку или уйти не туда — стоит посмотреть, пока не поздно.'],
+  blocked: ['⛔ стоит', 'bad', 'Стоит: работа не двигается, пока не снимут внешнюю причину (ИТ, руководитель, другая задача).'],
+};
+const healthKind = (i) => (i.health === 'blocked' || i.blocked ? 'blocked' : i.health === 'risk' ? 'risk' : '');
+const healthWhy = (i) => (healthKind(i) === 'blocked' ? i.blocked : i.risk) || '';
+const healthTag = (i) => {
+  const k = healthKind(i);
+  if (!k) return '';
+  const [txt, cls, about] = HEALTH[k], why = healthWhy(i);
+  return `<span class="tag ${cls}" data-act="health" data-ref="${esc(i.tab + '|' + i.id)}" tabindex="0" role="button"
+    title="${esc(about + '\nПричина: ' + (plain(why) || 'агент не указал') + '\nЩелчок — подробнее')}">${txt}${k === 'blocked' && why ? ': ' + md(why, true, i) : ''}</span>`;
+};
+function healthPop(t) {
+  const i = findItem(t.dataset.ref), k = i && healthKind(i);
+  if (!k) return;
+  const why = healthWhy(i);
+  menu(t, `<div class="mpop"><p>${esc(HEALTH[k][2])}</p><p><b>Причина:</b> ${why ? md(why, true, i) : '<span class="sess">агент не указал — спросите в сессии задачи или в вопросе</span>'}</p></div><hr>`
+    + mi('card', 'Открыть карточку') + mi('clear', k === 'risk' ? 'Снять риск' : 'Снять «стоит»'), async (b) => {
+    if (b.dataset.m === 'card') openCard(t.dataset.ref);
+    else if (b.dataset.m === 'clear') {
+      await post('tabs', 'field', { dir: i.dir, field: 'health', value: '' });
+      if (k === 'blocked' && i.blocked) await post('tabs', 'field', { dir: i.dir, field: 'blocked', value: '' });
+    }
+    return true;
+  });
+}
 
 // шкала этапов: разделы плана по порядку, у каждого сделано/всего; текущий — stage или первый незакрытый
 function stages(i) {
@@ -234,7 +293,7 @@ function stageBar(i, ref) {
   if (ss.length < 2) return '';
   const work = (i.plan || []).filter((p) => !p.q && !p.req);
   const tip = (x) => `${x.name}: сделано ${x.done} из ${x.total}\n` + work.filter((p) => p.section === x.name)
-    .map((p) => `${p.state === 'done' || p.state === 'skip' ? '✓' : p.status === 'doing' ? '●' : '·'} ${p.text}`).slice(0, 12).join('\n')
+    .map((p) => `${p.state === 'done' || p.state === 'skip' ? '✓' : p.status === 'doing' ? '●' : '·'} ${plain(p.text)}`).slice(0, 12).join('\n')
     + (x.total > 12 ? `\n… ещё ${x.total - 12}` : '');
   const cur = ss.find((x) => x.st === 'cur');
   return `<div class="sb-cap">Этапы — разделы плана; щелчок по этапу — его пункты${cur ? ` · <b>сейчас: этап ${cur.n} из ${cur.of} «${esc(cur.name)}»</b>, сделано ${cur.done} из ${cur.total}` : ''}</div>
@@ -268,9 +327,9 @@ function taskView(i, mode) {
     i.updated && `handoff ${esc(String(i.updated).slice(0, 10))}${i.stale ? ' <span class="tag stale" title="файлы новее handoff">устарел</span>' : ''}`,
     i.project && esc(i.project), s.n && `<b class="live">●${s.n}</b> ${names.join(', ')}`, claimTag(i, card),
     (i.waits || []).length && `<span class="tag blocked">⏳ ждёт ${esc(i.waits.join(', '))}</span>`].filter(Boolean).join(' · ');
-  const summary = `<section class="t-sum"><div class="t-sumbody">${i.goal ? `<div class="goal mdx">${md(i.goal)}</div>` : ''}${i.desc ? `<div class="desc mdx">${md(i.desc)}</div>` : ''}
-      ${i.next ? `<div class="t-next"><span class="lbl">Дальше</span> ${md(i.next, true)}</div>` : ''}
-      ${i.current ? `<div class="t-cur"><span class="lbl">В работе</span> ${md(i.current, true)}</div>` : ''}
+  const summary = `<section class="t-sum"><div class="t-sumbody">${i.goal ? `<div class="goal mdx">${md(i.goal, false, i)}</div>` : ''}${i.desc ? `<div class="desc mdx">${md(i.desc, false, i)}</div>` : ''}
+      ${i.next ? `<div class="t-next"><span class="lbl">Дальше</span> ${md(i.next, true, i)}</div>` : ''}
+      ${i.current ? `<div class="t-cur"><span class="lbl">В работе</span> ${md(i.current, true, i)}</div>` : ''}
       ${facts ? `<div class="t-facts">${facts}</div>` : ''}</div></section>`;
 
   // --- содержимое вкладок ---
@@ -384,7 +443,8 @@ const isLocal = (u) => /^[A-Za-z]:[\\/]/.test(u);
 const fileUrl = (u) => '/f/' + u[0].toUpperCase() + '/' + u.slice(3).split(/[\\/]/).map(encodeURIComponent).join('/');
 const extOf = (u) => (u.split(/[?#]/)[0].match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase();
 const isMd = (u) => /^(md|markdown)$/.test(extOf(u));
-const INPANEL = new Set(['md', 'markdown', 'html', 'htm', 'txt', 'pdf', 'png', 'jpg', 'jpeg', 'svg', 'gif', 'webp', 'json', 'log']);
+const INPANEL = new Set(['md', 'markdown', 'html', 'htm', 'txt', 'pdf', 'png', 'jpg', 'jpeg', 'svg', 'gif', 'webp', 'json', 'log',
+  'py', 'ps1', 'js', 'mjs', 'cmd', 'sh', 'cs', 'css', 'yml', 'yaml', 'xml', 'bsl']);
 
 function docName(d) {
   if (d.title) return d.title;
@@ -616,8 +676,8 @@ function kcard(i) {
   return `<div class="kcard" data-act="card" data-ref="${esc(i.tab + '|' + i.id)}" data-ctx="task" tabindex="0" role="button" title="открыть карточку">
     <div class="kh">${prioTag(i)}<span class="id">${esc(i.id)}</span>${healthTag(i)}${s.n ? `<b class="live">●${s.n}</b>` : ''}</div>
     <div class="kt">${esc(i.title)}</div>
-    ${cur ? `<div class="ks" title="${esc(cur.name)}: сделано ${cur.done} из ${cur.total}">● ${esc(cur.name)} <span class="sess">· этап ${cur.n} из ${cur.of}</span></div>` : i.stage ? `<div class="ks">${md(i.stage, true)}</div>` : ''}
-    ${i.next ? `<div class="kn">${md(i.next, true)}</div>` : ''}
+    ${cur ? `<div class="ks" title="${esc(cur.name)}: сделано ${cur.done} из ${cur.total}">● ${esc(cur.name)} <span class="sess">· этап ${cur.n} из ${cur.of}</span></div>` : i.stage ? `<div class="ks">${md(i.stage, true, i)}</div>` : ''}
+    ${i.next ? `<div class="kn">${md(i.next, true, i)}</div>` : ''}
     <div class="kf">${nWait(i) ? `<span class="tag wait">ждут вас: ${nWait(i)}</span>` : ''}${remainTag(i)}
       ${i.percent != null ? `<span class="bar" title="${i.percent}%"><i style="width:${i.percent}%"></i></span>` : ''}</div></div>`;
 }
@@ -715,6 +775,7 @@ document.addEventListener('click', async (e) => {
     else openDoc(d.dataset.doc);
     return;
   }
+  if (e.target.closest('a.flink')) return;   // путь внутри `кода`: открыть, а не скопировать
   if (e.target.closest('#vclose')) { closeDoc(); return; }
   const t = e.target.closest('[data-view],[data-act],[data-copy]');
   if (!t) return;
@@ -744,6 +805,8 @@ document.addEventListener('click', async (e) => {
     render();
   } else if (a === 'ctab') {
     ctab[t.dataset.ref] = t.dataset.v; store.set('ctab', ctab); render();
+  } else if (a === 'health') {
+    e.stopPropagation(); healthPop(t);
   } else if (a === 'answer') {
     ctab[t.dataset.ref] = 'q'; store.set('ctab', ctab); openCard(t.dataset.ref);
     document.querySelector(`.task.card textarea[data-index="${t.dataset.k}"]`)?.focus();
@@ -937,7 +1000,7 @@ function openCtx(target, at) {
 document.addEventListener('contextmenu', (e) => {
   const t = e.target;
   if (e.shiftKey || t.closest('input, textarea, select, #viewer') || String(getSelection()).trim()) return;   // системное меню
-  if (t.closest('a[href]:not([data-doc])')) return;
+  if (t.closest('a[href]:not([data-doc]):not([data-ctx])')) return;
   if (openCtx(t, { x: e.clientX, y: e.clientY })) e.preventDefault();
 });
 

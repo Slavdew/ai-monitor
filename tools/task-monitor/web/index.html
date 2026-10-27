@@ -69,8 +69,12 @@ nav .x { border:0; background:none; font:inherit; cursor:pointer; color:var(--mu
   border-radius:0 0 8px 8px; background:var(--bg); font-size:12px; color:var(--mute) }
 .strip-head { cursor:pointer; user-select:none } .strip-head:hover { color:var(--fg) }
 .strip b { color:var(--fg); font-weight:600 }
-/* строка — всегда в одну линию: длинное название и путь обрезаются многоточием */
-.head { display:flex; gap:10px; align-items:center; cursor:pointer; min-width:0 }
+/* строка — в одну линию, пока влезает; не влезают чипы (много тегов, крупный масштаб, широкий
+   предпросмотр) — хвост уходит второй строкой, кнопка карточки остаётся видна справа */
+.head { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center; cursor:pointer; min-width:0 }
+.head .go { margin-left:auto }
+.tag[data-act="health"] { cursor:pointer } .menu .mpop { max-width:360px; padding:4px 10px; white-space:normal } .menu .mpop p { margin:4px 0 }
+a.flink { color:var(--acc); text-decoration:underline dotted; text-underline-offset:2px } a.flink:hover { text-decoration-style:solid }
 /* в строке сжимается только название; чипы и полоса — целиком */
 .head > * { flex:none } .head .tag, .head .sess { white-space:nowrap }
 .head .title, .head .grow { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
