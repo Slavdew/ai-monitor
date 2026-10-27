@@ -41,7 +41,7 @@ def read_board(path, now):
             continue
         m = re.match(r'^(.*\S)\s+#(\S+)$', p[2])
         tag = m.group(1) if m else p[2]
-        notes.append({'at': _ms(p[0]), 'until': _ms(p[1]), 'owner': p[2], 'tag': tag, 'tag_id': _tag_id(tag),
+        notes.append({'raw': p[0], 'at': _ms(p[0]), 'until': _ms(p[1]), 'owner': p[2], 'tag': tag, 'tag_id': _tag_id(tag),
                       'key': m.group(2).lower() if m else '', 'text': p[3]})
     closed, latest = {}, {}
     for n in notes:

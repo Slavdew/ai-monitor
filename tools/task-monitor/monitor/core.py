@@ -14,7 +14,9 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import time
+import types
 
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -162,6 +164,8 @@ def modules(cfg, reload=False):
     if _registry and not reload:
         return _registry
     _registry.clear()
+    pkg = sys.modules.setdefault('tm_modules', types.ModuleType('tm_modules'))   # модули — tm_modules.<имя>
+    pkg.__path__ = []
     for name in CORE_SOURCES:
         _registry[name] = {'name': name, 'core': True, 'dir': os.path.join(HOME, 'monitor', 'sources'), 'manifest': {'api': CORE_API},
                            'mod': importlib.import_module(f'monitor.sources.{name}'), 'error': '', 'hash': ''}
@@ -226,6 +230,42 @@ def sources(cfg):
             src['every_sec'] = recs[n]['manifest']['every_sec']
         out.append((n, src, recs[n]['mod']))
     return out
+
+
+HOOK_BUDGET, HOOK_TOTAL, HOOK_LINES = 0.3, 1.0, 12   # с на модуль, с на всех, строк от модуля
+
+
+def module_hooks(cfg, data):
+    """Вклад модулей в хук UserPromptSubmit (A6, A15): hook.py модулей с "hooks": true в манифесте,
+    hook(cfg, src, data) -> str. Все — в своих потоках сразу; кто не успел к бюджету — молчит в этот раз,
+    ошибка модуля — тоже молчание: хук не должен мешать вводу."""
+    jobs = []
+    for name, src, _ in sources(cfg):
+        rec = modules(cfg)[name]
+        path = os.path.join(rec['dir'], 'hook.py')
+        if not rec['manifest'].get('hooks') or not os.path.isfile(path):
+            continue
+        out = {}
+
+        def run(name=name, src=src, path=path, out=out):
+            try:
+                spec = importlib.util.spec_from_file_location(f'tm_modules.{name}_hook', path)
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                out['text'] = mod.hook(cfg, src, data) or ''
+            except Exception:
+                pass
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        jobs.append((t, out))
+    end, lines = time.time() + HOOK_TOTAL, []
+    for t, out in jobs:
+        t.join(max(0, min(HOOK_BUDGET, end - time.time())))
+        text = out.get('text', '').rstrip('\n')
+        if text:
+            ls = text.split('\n')
+            lines += ls[:HOOK_LINES] + ([f'… ещё строк: {len(ls) - HOOK_LINES}'] if len(ls) > HOOK_LINES else [])
+    return lines
 
 
 def require(cfg, name):

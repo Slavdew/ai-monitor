@@ -4,7 +4,8 @@
   py install.py --check [<проект> ...]   только отчёт о копиях навыков (дубли, устаревшие)
 
 - копирует навыки task-monitor, session-board и handoff в ~/.claude/skills;
-- в ~/.claude/settings.json: хуки UserPromptSubmit (ответы владельца из панели, объявления доски),
+- в ~/.claude/settings.json: один хук UserPromptSubmit — task.py hook (ответы владельца, доска и другие модули;
+  прежний session-board.js снимается),
   разрешение на task.py, переменная SESSION_BOARD — доска машины, когда в проекте нет .dev.env;
 - обёртка `tm` (имя — --name): `tm.cmd` для PowerShell и cmd, `tm` без расширения для Git Bash, в папку --bin
   (по умолчанию %LOCALAPPDATA%	ask-monitorin), папка — в пользовательский PATH (без прав администратора;
@@ -22,8 +23,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 CLAUDE = os.path.join(os.path.expanduser('~'), '.claude')
 TASK = os.path.join(HERE, 'task.py')
-HOOKS = [f'py "{TASK}" hook',
-         f'node "{os.path.join(CLAUDE, "skills", "session-board", "hooks", "session-board.js")}"']
+HOOKS = [f'py "{TASK}" hook']   # один хук-диспетчер: ответы владельца и hook.py модулей (доска — modules/board)
+REPLACED = ('session-board.js',)   # прежние хуки, которые диспетчер заменил: снимаются
 ALLOW = [f'Bash(python {TASK.replace(os.sep, "/")} *)', f'PowerShell(python {TASK} *)']
 OLD = ('plan-board\\plan.py', 'task-monitor\\task.py')
 
@@ -128,6 +129,9 @@ def main():
     path = os.path.join(CLAUDE, 'settings.json')
     d = load(path)
     groups = d.setdefault('hooks', {}).setdefault('UserPromptSubmit', [])
+    for g in groups:   # прежний хук доски на Node — его работу делает диспетчер
+        g['hooks'] = [h for h in g.get('hooks', []) if not any(r in h.get('command', '') for r in REPLACED)]
+    groups[:] = [g for g in groups if g.get('hooks')]
     have = {h.get('command') for g in groups for h in g.get('hooks', [])}
     new = [{'type': 'command', 'command': c, 'timeout': 5} for c in HOOKS if c not in have]
     if new:

@@ -29,7 +29,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from monitor.core import load_config, log_call, model_on, module_on, module_settings, modules, read_json, require, session_id, sources  # noqa: E402
+from monitor.core import load_config, log_call, model_on, module_hooks, module_on, module_settings, modules, read_json, require, session_id, sources  # noqa: E402
 from monitor import questions  # noqa: E402
 from monitor.sources import tabs  # noqa: E402
 
@@ -252,25 +252,35 @@ def list_modules(cfg):
 
 
 def hook(cfg):
-    """UserPromptSubmit: тишина, если сказать нечего; ответы — только по задачам этой сессии."""
-    if not model_on(cfg, 'questions'):
-        return
-    sid, cwd = session_id(), ''
+    """UserPromptSubmit — один хук на всё (A6): stdin читается один раз, вклад ядра (ответы и просьбы
+    владельца по задачам этой сессии) и hook.py модулей (доска…). Тишина, если сказать нечего."""
+    d = {}
     if not sys.stdin.isatty():
         try:
             d = json.loads(sys.stdin.read().lstrip('﻿') or '{}')
-            sid, cwd = d.get('session_id') or sid, d.get('cwd') or ''
         except ValueError:
             pass
-    try:
-        lines = questions.hook(cfg, sid or 'unknown', cwd)
-    except (OSError, ValueError):
-        return
+    sid, cwd = d.get('session_id') or session_id(), d.get('cwd') or ''
+    d['session_id'] = sid
+    lines = []
+    if model_on(cfg, 'questions'):
+        try:
+            lines = questions.hook(cfg, sid or 'unknown', cwd)
+        except (OSError, ValueError):
+            pass
     if lines and '→' in ''.join(lines):   # есть ответы с командами — путь к task.py для них
         print(f'Панель задач: ответы владельца — учесть и подтвердить (python {os.path.abspath(__file__).replace(os.sep, "/")} <команда>):')
         print('\n'.join(lines))
     elif lines:
         print('Панель задач: ' + '; '.join(lines))
+    try:
+        extra = module_hooks(cfg, d)
+    except Exception:   # хук не мешает вводу
+        extra = []
+    if extra:
+        print('\n'.join(extra))
+    sys.stdout.flush()
+    os._exit(0)   # не ждать модулей, не успевших к бюджету (A15)
 
 
 def watch(cfg, task=None):
