@@ -179,7 +179,7 @@ function qaHtml(i, p, k, edit) {
   const open = awaiting(p) || draft || opt || shown.has('add:' + key);
   if (!open) return `<div class="qa">${advice}${was}${answers}${asked}${status}${p.status === 'wait' ? `<span><button class="btn sm" data-act="show" data-key="add:${esc(key)}">Дополнить ответ</button></span>` : ''}</div>`;
   const opts = [['@reword', 'Вопрос непонятен — агент перепишет проще; в поле — что именно непонятно'],
-    ...(p.note ? [['@advice', 'ответ — совет агента; в поле — дополнение']] : []), ...(p.opts || []).map((o) => [o, ''])];
+    ...(p.note && !p.act ? [['@advice', 'ответ — совет агента; в поле — дополнение']] : []), ...(p.opts || []).map((o) => [o, ''])];
   const bar = `<div class="qopts" role="radiogroup" aria-label="Варианты ответа">${opts.map(([v, tip]) =>
     `<button class="qopt${v === opt ? ' on' : ''}${v === '@reword' ? ' rw' : v === '@advice' ? ' adv' : ''}" role="radio" aria-checked="${v === opt}"
       data-act="qopt" ${at} data-v="${esc(v)}"${tip ? ` title="${esc(tip)}"` : ''}>${esc(optName(v))}</button>`).join('')}</div>`;
