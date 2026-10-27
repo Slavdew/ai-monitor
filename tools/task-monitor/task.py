@@ -8,7 +8,7 @@
   set T N status=done note="…" after=3,4 text="…" section=…      поля пункта
   set T priority=1 stage="…" health=ok next="…" related+=B docs+="Назв::путь"   поля задачи
   batch T < строки                      пачка правок плана одной записью
-  ack T N… [done]                       ответ учтён (done — заодно закрыть вопрос)
+  ack T N… [done]                       ответ учтён (done — заодно закрыть вопрос); синоним — принят T N… [done]
   unseen [--mine]                       неподтверждённые ответы с готовыми командами
   next [--tab T] [--project P] | take T | release [T]  взять первую свободную / эту / отпустить
   hold <ресурс> "зачем" [--ttl 20m] | free [ресурс] | held     захват ИБ, стенда, ветки (help hold)
@@ -240,6 +240,8 @@ def main():
         k = argv.index('--sid')
         os.environ['TASK_SESSION'] = argv[k + 1] if k + 1 < len(argv) else ''
         del argv[k:k + 2]
+    if argv and argv[0] == 'принят':   # русский синоним ack (acknowledge — «подтвердить получение»)
+        argv = ['ack', *argv[1:]]
     if not argv or argv[0] in ('-h', '--help'):
         print(help_text(None))
         return
