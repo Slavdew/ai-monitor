@@ -29,6 +29,8 @@ CASES = [
     ('BOM в конвейере', 'PowerShell', '"true" | ssh r sh', 'sh: line 1: \ufefftrue: not found', 'ps.pipe-bom'),
     ('NativeCommandError', 'PowerShell', 'git log 2>&1', 'git : warning\n    + CategoryInfo : NotSpecified: '
      '(warning:String) [], RemoteException\n    + FullyQualifiedErrorId : NativeCommandError', 'ps.native-stderr'),
+    ('отказ сторожа из транскрипта', 'Bash', 'cat > a <<EOF', 'PreToolUse:Bash hook error: Сторож (heredoc_backslash): '
+     'В теле heredoc', 'guard.heredoc_backslash'),
     ('голый код выхода', 'Bash', 'false', 'Exit code 1', 'exit.nonzero'),
     ('ls нет файла', 'Bash', 'ls x', "Exit code 2\nls: cannot access 'x': No such file or directory", 'fs.missing'),
     ('FileNotFoundError — не fs.missing', 'Bash', 'py x', "Traceback (most recent call last):\nFileNotFoundError: "

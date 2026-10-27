@@ -63,7 +63,7 @@ def log_refusal(rule, tool, inp, call):
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import pitfalls
-        pitfalls.log_guard(rule, tool, inp, call.get('cwd', ''), call.get('session_id', ''))
+        pitfalls.log_guard(rule, tool, inp, call.get('cwd', ''), call.get('session_id', ''), call.get('tool_use_id', ''))
     except Exception:
         pass
 

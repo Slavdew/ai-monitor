@@ -92,8 +92,9 @@ def signature(out):
 
 def classify(tool, inp, out, guard_rule=None):
     """(id, fp) по вызову и выводу. inp — строка ввода (команда, путь, old_string)."""
-    if guard_rule:
-        return 'guard.' + guard_rule, ''
+    m = re.search(r'Сторож \((\w+)\)', out)   # отказ сторожа, как его видит транскрипт
+    if guard_rule or m:
+        return 'guard.' + (guard_rule or m.group(1)), ''
     for pid, t, o, n, _ in _RX:
         if pid == 'guard.*' or (t and not t.fullmatch(tool)) or (o and not o.search(out)) or (n and not n.search(inp)):
             continue
@@ -131,10 +132,11 @@ def text_of(x):
     return '' if x is None else str(x)
 
 
-def record(tool, inp, out, src, ts=None, session='', agent='', cwd='', guard_rule=None):
+def record(tool, inp, out, src, ts=None, session='', agent='', cwd='', guard_rule=None, tu=''):
+    """tu — tool_use_id: по нему backfill не повторяет то, что уже записали хук и сторож."""
     inp, out = inp[:HEAD], clip(out)   # классифицировать то же, что хранится: reclassify даст тот же id
     pid, fp = classify(tool, inp, out, guard_rule)
-    return {'v': 1, 'ts': ts or datetime.datetime.now().astimezone().isoformat(timespec='seconds'), 'id': pid,
+    return {'v': 1, 'tu': tu,'ts': ts or datetime.datetime.now().astimezone().isoformat(timespec='seconds'), 'id': pid,
             'fp': fp, 'tool': tool, 'src': src, 'session': session[:36], 'agent': agent, 'cwd': cwd,
             'sig': signature(out) if pid == 'unclassified' else '',
             'in': _SECRET.sub('<secret>', inp), 'out': _SECRET.sub('<secret>', out)}
@@ -183,7 +185,8 @@ def cmd_hook():
         if re.fullmatch(r'Exit code \d+', out.strip()):
             out = from_transcript(ev.get('transcript_path'), ev.get('tool_use_id')) or out
         append([record(tool, input_text(tool, ev.get('tool_input') or {}), out, 'hook', session=ev.get('session_id', ''),
-                       agent=ev.get('agent_type') or ev.get('agent_id') or 'main', cwd=ev.get('cwd', ''))])
+                       agent=ev.get('agent_type') or ev.get('agent_id') or 'main', cwd=ev.get('cwd', ''),
+                       tu=ev.get('tool_use_id', ''))])
     except Exception:   # журнал не должен мешать работе
         pass
     return 0
@@ -209,10 +212,10 @@ def from_transcript(path, tu_id, tail=2_000_000):
     return ''
 
 
-def log_guard(rule, tool, inp, cwd='', session=''):
+def log_guard(rule, tool, inp, cwd='', session='', tu=''):
     """Отказ сторожа — тоже грабля; вызывается из guard.py, ошибки глотает."""
     try:
-        append([record(tool, input_text(tool, inp), '', 'guard', session=session, cwd=cwd, guard_rule=rule)])
+        append([record(tool, input_text(tool, inp), '', 'guard', session=session, cwd=cwd, guard_rule=rule, tu=tu)])
     except Exception:
         pass
 
@@ -294,10 +297,9 @@ def _scan(path, seen):
                     if not (c.get('is_error') or 'Traceback (most recent' in body or (m and m.group(1) != '0')):
                         continue
                     tool, inp, ts = calls.get(c.get('tool_use_id'), ('?', {}, rec.get('timestamp', '')))
-                    r = record(tool, input_text(tool, inp), body, 'backfill', ts=ts, session=rec.get('sessionId', ''),
-                               agent='sub' if rec.get('isSidechain') else 'main', cwd=rec.get('cwd', ''))
-                    r['tu'] = c.get('tool_use_id')
-                    out.append(r)
+                    out.append(record(tool, input_text(tool, inp), body, 'backfill', ts=ts,
+                                      session=rec.get('sessionId', ''), agent='sub' if rec.get('isSidechain') else 'main',
+                                      cwd=rec.get('cwd', ''), tu=c.get('tool_use_id', '')))
     return out
 
 
