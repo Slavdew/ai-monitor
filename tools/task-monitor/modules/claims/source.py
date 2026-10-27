@@ -47,7 +47,9 @@ def claims(cfg, reg=None):
     reg = _registry(cfg) if reg is None else reg
     out = {}
     for path in glob.glob(os.path.join(_dir(cfg), '*.json')):
-        c = read_json(path) or {}
+        c = read_json(path)
+        if c is None:   # пишется прямо сейчас (или испорчен) — не наш повод удалять чужой захват
+            continue
         if _alive(cfg, c, reg):
             out[c['task']] = c
         else:
@@ -64,9 +66,11 @@ def touch(cfg, sid):
         c = read_json(path) or {}
         if c.get('sid') == sid:
             c['at'] = now_ms()
-            try:
-                with open(path, 'w', encoding='utf-8') as f:
+            try:   # временный файл и os.replace: читающий claims() не увидит пустой файл (аудит 27.10)
+                tmp = f'{path}.{os.getpid()}.tmp'
+                with open(tmp, 'w', encoding='utf-8') as f:
                     f.write(json.dumps(c, ensure_ascii=False))
+                os.replace(tmp, path)
             except OSError:
                 pass
 

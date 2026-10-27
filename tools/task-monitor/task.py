@@ -183,6 +183,7 @@ def main():
     if '-h' in argv or '--help' in argv:   # task.py batch -h — тема команды
         argv = ['help', argv[0] if argv[0] in TOPICS else ('questions' if argv[0] in ('ask', 'req', 'ack', 'unseen') else '')]
     cfg = load_config()
+    cfg['_no_paths'] = True   # пути-ссылки нужны только странице
     a = parser().parse_args(argv)
     if a.cmd == 'help':
         try:

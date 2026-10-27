@@ -141,7 +141,7 @@ def read_item(dir_, tab, cfg):
     for p in plan:
         texts += [v for k, v in p.items() if isinstance(v, str) and k not in ('status', 'state', 'who', 'draft')]
         texts += [a.get('text', '') if isinstance(a, dict) else str(a) for a in p.get('answers') or []]
-    item['paths'] = text_paths(cfg, [t for t in texts if t], dir_)
+    item['paths'] = {} if cfg.get('_no_paths') else text_paths(cfg, [t for t in texts if t], dir_)   # CLI ссылки не рисует
     return item
 
 

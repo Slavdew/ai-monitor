@@ -117,13 +117,25 @@ def in_tab_root(cfg, path):
 
 def allowed_file(cfg, path):
     """Полный путь файла, если он есть и лежит в корне вкладки или в file_roots, иначе None."""
+    if not os.path.isfile(path):   # дешёвая проверка первой: realpath на Windows дорог
+        return None
     p = os.path.realpath(path)
     n = os.path.normcase(p)
-    for r in [t['root'] for t in cfg.get('tabs', [])] + list(cfg.get('file_roots', [])):
-        r = os.path.normcase(os.path.realpath(r)).rstrip('\\')
-        if (n == r or n.startswith(r + '\\')) and os.path.isfile(p):
+    for r in _real_roots(cfg):
+        if n == r or n.startswith(r + '\\'):
             return p
     return None
+
+
+_roots_cache = {}
+
+
+def _real_roots(cfg):
+    """realpath корней вкладок и file_roots — один раз на набор корней, не на каждый путь (аудит 27.10)."""
+    key = tuple(t['root'] for t in cfg.get('tabs', [])) + tuple(cfg.get('file_roots', []))
+    if key not in _roots_cache:
+        _roots_cache[key] = [os.path.normcase(os.path.realpath(r)).rstrip('\\') for r in key]
+    return _roots_cache[key]
 
 
 # пути к файлам в тексте задачи: C:\x\y.md, docs/a.md, `путь с пробелами`, [имя](путь), голое имя.md
@@ -141,19 +153,29 @@ def text_paths(cfg, texts, base):
         bases.append(up)
         up = os.path.dirname(up)
     bases += [t['root'] for t in cfg.get('tabs', [])]
-    out = {}
+    out, tried, now = {}, set(), time.time()
     for text in texts:
         for m in PATH_RE.finditer(text):
             raw = next(g for g in m.groups() if g).rstrip('.,;:')
-            if raw in out or not re.search(r'\.[A-Za-z0-9]{1,6}$', raw):
+            if raw in tried or not re.search(r'\.[A-Za-z0-9]{1,6}$', raw):
                 continue
-            rel = raw.replace('/', '\\')
-            for b in [''] if re.match(r'[A-Za-z]:\\', rel) else bases:
-                p = allowed_file(cfg, os.path.join(b, rel) if b else rel)
-                if p:
-                    out[raw] = p
-                    break
+            tried.add(raw)   # и ненайденный путь второй раз не ищем
+            hit = _path_cache.get((base, raw))
+            if hit and now - hit[1] < PATH_TTL:   # тик сервера — раз в 2 с, файлы меняются реже
+                p = hit[0]
+            else:
+                rel, p = raw.replace('/', '\\'), None
+                for b in [''] if re.match(r'[A-Za-z]:\\', rel) else bases:
+                    p = allowed_file(cfg, os.path.join(b, rel) if b else rel)
+                    if p:
+                        break
+                _path_cache[(base, raw)] = (p, now)
+            if p:
+                out[raw] = p
     return out
+
+
+_path_cache, PATH_TTL = {}, 30
 
 
 # --- реестр модулей (decisions.md A1–A4) ---
