@@ -75,4 +75,5 @@
 | `tools/guards/` | сторож вызовов и журнал граблей |
 | `tools/handoff/`, `tools/keepwarm/` | хуки сжатия контекста и поддержания кэша |
 | `rules/keepwarm.md` | правило keepwarm для сессий |
+| `docs/extending.md` | правила доработки: своё — локально, в общее — после согласования |
 | `docs/handoff-design.md` | разбор устройства handoff |
