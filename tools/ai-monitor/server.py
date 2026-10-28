@@ -220,10 +220,15 @@ class Handler(BaseHTTPRequestHandler):
             while True:
                 with hub.changed:
                     if hub.rev == seen:
-                        hub.changed.wait(15)
+                        hub.changed.wait(5)
                     rev = hub.rev
                 self.wfile.write(f'data: {rev}\n\n'.encode() if rev != seen else b': ping\n\n')
                 self.wfile.flush()
+                # вторым куском — проталкиватель: в Opera GX сигнал доходил только со следующим пингом (~15 с, 28.10;
+                # сервер отдаёт за 10 мс, Edge получает за 0,2 с) — кто-то на пути держит последний кусок потока
+                if rev != seen:
+                    self.wfile.write(b': flush\n\n')
+                    self.wfile.flush()
                 seen = rev
         except OSError:
             pass
