@@ -98,13 +98,17 @@ def draft(cfg, args):
 
 def submit(cfg, args):
     """Все черновики задачи разом: ответы дописываются, агентам — answers.json и строка в events.jsonl.
-    Черновик проверки актуальности (review_draft) уходит следом просьбой review."""
+    Черновик проверки актуальности (review_draft) уходит следом просьбой review.
+    kind — кнопка блока «Ждут вас»: act — только действия, q — только вопросы и проверка; пусто — всё (карточка)."""
     sent, review_ = [], []
+    kind = args.get('kind') or ''
 
     def fn(t):
-        if t.pop('review_draft', None):
+        if kind != 'act' and t.pop('review_draft', None):
             review_.append(True)
         for k, p in enumerate(t.get('plan', [])):
+            if kind and (kind == 'act') != bool(p.get('act')):
+                continue   # черновик другого блока остаётся черновиком
             text, rephrase, opt = p.pop('draft', None), p.pop('rephrase_draft', None), p.pop('draft_opt', None)
             # вариант + текст: текст — дополнение к варианту; без варианта текст — свой ответ; «проще» — просьба переписать
             if opt == '@reword':

@@ -248,8 +248,9 @@ function planRow(i, p, k, full, answer = full, inActs = false) {   // inActs —
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
   return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${p.doc ? '<span class="tag doc" title="Вопросы с вариантами — в файле: выберите там, «Перенести в панель» вставит сводку в ответ">Ответы в файле</span> ' : ''}${md(p.text, true, i)}${p.doc ? ` <a href="#" data-doc="${esc(p.doc)}" title="${esc(p.doc)}">открыть файл ›</a>` : ''}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
-const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length
-  + (reviewOn(i) ? 1 : 0);
+const nDraftOf = (i, kind = '') => (i.plan || []).filter((p, k) => (!kind || (kind === 'act') === !!p.act)
+  && ((drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k))).length
+  + (kind !== 'act' && reviewOn(i) ? 1 : 0);
 // ответ доходит до агента только с репликой в его сессии (хук на вводе) — подсказка, куда написать (аудит 27.10, ★)
 const PING_PHRASE = 'Ответил в панели — посмотри';
 function sessionOf(i) {
@@ -268,18 +269,29 @@ function agentHint(i) {
   const copy = s ? copyBtn(PING_PHRASE, `«${PING_PHRASE}»`) : (i.resume ? copyBtn(i.resume, 'Команда продолжения') : '');
   return `<div class="agenthint"><span class="sess">Зафиксировано ${n}, агент ещё не видел.</span> ${where} ${copy}</div>`;
 }
-const submitInner = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Зафиксировать ответы (${nDraftOf(i)})</button>
+// kind — блок «Ждут вас»: act — только действия, q — только вопросы (и проверка актуальности); пусто — всё (карточка)
+const submitInner = (i, kind = '') => (nDraftOf(i, kind) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}" data-kind="${kind}">Зафиксировать ответы (${nDraftOf(i, kind)})</button>
       <span class="sess">Черновики видны только вам, пока не зафиксированы</span></p>` : '') + agentHint(i);
+const draftTag = (i, kind) => `<span class="tag draftn"${nDraftOf(i, kind) ? '' : ' hidden'}>не отправлено: ${nDraftOf(i, kind)}</span>`;
 // контейнер есть всегда: пока фокус в поле ответа, render отложен — кнопку обновляет refreshSubmit на месте
 // «Проверить актуальность вопросов» — под шапкой вопросов в карточке и в «Ждут вас». Черновик, как ответ: уходит
 // с «Зафиксировать ответы», до того снимается повторным щелчком (случайный щелчок не будит агента)
 const reviewOn = (i) => drafts[i.dir + '|review'] ?? i.review_draft ?? false;
 const reviewBtn = (i) => `<p class="sess qrev"><button class="btn${reviewOn(i) ? ' on' : ''}" data-act="qreview" data-dir="${esc(i.dir)}" aria-pressed="${reviewOn(i)}" title="Агент задачи пройдёт по открытым вопросам: на что ответ уже есть и что потеряло смысл — закроет с причиной, остальное отметит проверенным. Уйдёт с «Зафиксировать ответы»; повторный щелчок — отменить">${reviewOn(i) ? '✓ Проверка актуальности — уйдёт с «Зафиксировать»' : 'Проверить актуальность вопросов'}</button></p>`;
-const submitHtml = (i) => `<div class="qsubmit" data-dir="${esc(i.dir)}">${submitInner(i)}</div>`;
+// строка отправки липнет к низу экрана, пока виден блок с черновиками; блок — полоса слева во всю высоту (вариант А, 189)
+const submitHtml = (i, kind = '') => `<div class="qsubmit${nDraftOf(i, kind) ? ' stick' : ''}" data-dir="${esc(i.dir)}" data-kind="${kind}">${submitInner(i, kind)}</div>`;
 function refreshSubmit(dir) {
   const i = items().find((x) => x.dir === dir);
-  const html = i && submitInner(i);   // только при изменении: пересозданная кнопка теряет щелчок
-  if (i) document.querySelectorAll(`.qsubmit[data-dir="${CSS.escape(dir)}"]`).forEach((el) => { if (el._h !== html) { el.innerHTML = html; el._h = html; } });
+  if (!i) return;
+  document.querySelectorAll(`.qsubmit[data-dir="${CSS.escape(dir)}"]`).forEach((el) => {
+    const kind = el.dataset.kind || '', n = nDraftOf(i, kind), html = submitInner(i, kind);
+    if (el._h !== html) { el.innerHTML = html; el._h = html; }   // только при изменении: пересозданная кнопка теряет щелчок
+    el.classList.toggle('stick', !!n);
+    const row = el.closest('.row');
+    row?.classList.toggle('dirty', !!n);
+    const tag = row?.querySelector('.draftn');
+    if (tag) { tag.hidden = !n; tag.textContent = `не отправлено: ${n}`; }
+  });
 }
 const copyBtn = (text, what) => `<button class="btn" data-copy="${esc(text)}" title="${esc(text)}">⧉ ${what}</button>`;
 
@@ -935,9 +947,9 @@ function renderInbox() {
   for (const i of fold.has('ib:acts') ? [] : acting) {   // как блок вопросов: варианты «Сделал» / «Не буду», свой ответ, «проще», отправка
     const fk = 'ina:' + i.tab + '|' + i.id, open = !fold.has(fk);
     const acts = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && p.act ? planRow(i, p, k, false, true, true) : '')).join('') : '';
-    rows.push({ key: 'act:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
+    rows.push({ key: 'act:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded') + (nDraftOf(i, 'act') ? ' dirty' : ''),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
-        ${nAct(i) ? `<span class="tag wait">Действия: ${nAct(i)}</span>` : ''}${cardBtn(i)}</div>${open ? `<ul class="plan">${acts}</ul>${submitHtml(i)}` : ''}` });
+        ${draftTag(i, 'act')}${nAct(i) ? `<span class="tag wait">Действия: ${nAct(i)}</span>` : ''}${cardBtn(i)}</div>${open ? `<ul class="plan">${acts}</ul>${submitHtml(i, 'act')}` : ''}` });
   }
   const answered = items().filter((i) => nQa(i) && inSub(i));
   if (answered.length) rows.push(sec('ib:qa', 'Ответы на ваши вопросы', answered.reduce((s, i) => s + nQa(i), 0)));
@@ -962,10 +974,10 @@ function renderInbox() {
     const fk = 'in:' + i.tab + '|' + i.id, open = !fold.has(fk);
     const asks = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && !p.act ? planRow(i, p, k, false, true) : '')).join('') : '';
     const n = nWait(i), done = (i.plan || []).filter((p) => p.status === 'wait' && !p.act).length - n;
-    rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
+    rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded') + (nDraftOf(i, 'q') ? ' dirty' : ''),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
-        ${n ? `<span class="tag wait">Вопросы: ${n}</span>` : ''}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
-        ${open ? `${n ? reviewBtn(i) : ''}<ul class="plan">${asks}</ul>${submitHtml(i)}` : ''}` });
+        ${draftTag(i, 'q')}${n ? `<span class="tag wait">Вопросы: ${n}</span>` : ''}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
+        ${open ? `${n ? reviewBtn(i) : ''}<ul class="plan">${asks}</ul>${submitHtml(i, 'q')}` : ''}` });
   }
   // просьбы владельца ждут агента, не его — внизу свёрнутой строкой, чтобы видеть неразобранное
   const n = withReq.reduce((s, i) => s + nReq(i), 0);
@@ -1112,8 +1124,15 @@ document.addEventListener('click', async (e) => {
   } else if (a === 'submit') {
     t.disabled = true;
     for (const el of document.querySelectorAll('[data-act="draft"]')) if (draftTimers[el.dataset.key]) await saveDraft(el);
-    const r = await post('tabs', 'submit', { dir: t.dataset.dir });
-    for (const k of Object.keys(drafts)) if (k.startsWith(t.dataset.dir + '|')) delete drafts[k];
+    const kind = t.dataset.kind || '', i = items().find((x) => x.dir === t.dataset.dir);
+    const r = await post('tabs', 'submit', { dir: t.dataset.dir, kind });
+    // свои черновики блока: act — только действия, q — вопросы и проверка актуальности; чужого блока не трогать
+    const mine = (key) => { const [, k] = key.slice(t.dataset.dir.length + 1).match(/^(\d+|review)/) || [];
+      if (k === undefined) return false;
+      if (!kind) return true;
+      if (k === 'review') return kind === 'q';
+      return (kind === 'act') === !!((i?.plan || [])[+k] || {}).act; };
+    for (const k of Object.keys(drafts)) if (k.startsWith(t.dataset.dir + '|') && mine(k)) delete drafts[k];
     if (r.ok) toast(`Зафиксировано: ${r.sent}`);
   } else if (a === 'qreview') {
     const i = items().find((x) => x.dir === t.dataset.dir), on = !(i && reviewOn(i));
