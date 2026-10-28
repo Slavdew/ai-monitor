@@ -94,7 +94,7 @@ nav .x:hover { color:var(--bad); background:color-mix(in srgb, var(--bad) 12%, t
 .kwdays label { display:inline-flex; align-items:center; gap:3px; line-height:1 } .kwdays input { margin:0 }
 /* галочка с подписью — по центру строки текста, не ниже неё (keepwarm, сессии, формы) */
 label:has(> input[type=checkbox]) { display:inline-flex; align-items:center; gap:4px } label > input[type=checkbox] { margin:0 }
-.kwf input, .kwf select { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:1px 4px }
+.kwf input, .kwf select { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--field); border-radius:6px; padding:1px 4px }
 .row.kwg .kwf, .row.kwrow .kwf { margin-top:0 } .row.kwrow { margin-top:-6px; margin-left:24px }
 .reqnew { display:flex; gap:8px; align-items:flex-end; margin:8px 0 4px } .reqnew textarea { flex:1; font:inherit; resize:vertical; color:var(--fg); background:var(--bg); border:1px solid var(--acc); border-radius:8px; padding:6px 8px }
 .tag[data-act="health"] { cursor:pointer } .menu .mpop { max-width:360px; padding:4px 10px; white-space:normal } .menu .mpop p { margin:4px 0 }
@@ -108,7 +108,7 @@ a.flink { color:var(--acc); text-decoration:underline dotted; text-underline-off
 .title { font-weight:600 } .grow { flex:1 }
 .tag { font-size:11px; padding:1px 6px; border-radius:10px; border:1px solid var(--line); color:var(--mute); white-space:nowrap }
 .tag.ok { color:var(--ok); border-color:var(--ok) } .tag.par { color:var(--acc); border-color:var(--acc); border-style:dashed }
-#limits .stale { color:var(--mute) } .wdot { color:var(--warn); font-size:16px; line-height:0 }
+#limits .stale { color:var(--mute) }
 .tag.active { color:var(--ok); border-color:var(--ok) } .tag.blocked, .tag.stale { color:var(--warn); border-color:var(--warn) }
 .tag.claim { color:var(--acc); border-color:var(--acc) } .tag.done { opacity:.6 } .tag.link { border-style:dashed }
 .bar { width:56px; height:6px; background:var(--line); border-radius:3px; overflow:hidden; align-self:center }
@@ -136,8 +136,8 @@ table { width:100%; border-collapse:collapse; background:var(--card); border:1px
 th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); font-size:13px }
 th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
 .err { color:var(--bad); font-size:12px; overflow-wrap:anywhere } .empty { overflow-wrap:anywhere } #limits { align-items:center }
-.ibtn { width:20px; height:20px; border:1px solid var(--line); border-radius:50%; background:none; color:var(--mute); font:inherit; font-size:11px; line-height:18px; padding:0; cursor:pointer }
-.ibtn:hover { color:var(--fg) } .ibtn.bad { color:var(--bad); border-color:var(--bad) }
+.ibtn { width:28px; height:28px; border:1px solid var(--line); border-radius:50%; background:none; color:var(--mute); font:inherit; font-size:13px; line-height:26px; padding:0; cursor:pointer }
+.ibtn:hover { color:var(--fg) } .ibtn.bad { color:var(--bad); border-color:var(--bad) } .tag .ibtn { width:24px; height:24px; line-height:22px; font-size:12px; margin:-4px -4px -4px 0 }
 .toast { white-space:pre-line; max-width:min(520px, calc(100vw - 32px)) } .empty { color:var(--mute); padding:20px 0 }
 .toast { position:fixed; bottom:16px; right:16px; background:var(--fg); color:var(--bg); padding:6px 12px; border-radius:6px; opacity:0; transition:opacity .2s }
 .toast.on { opacity:1 }
@@ -178,7 +178,7 @@ th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
 .flist a { color:var(--acc); text-decoration:none; white-space:nowrap } .flist .k { font-family:var(--font-mono); font-size:11px; color:var(--mute); margin-right:4px }
 .flist .fpath { font-size:11.5px; color:var(--mute); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; min-width:0 }
 .plan li.psec { cursor:pointer } .plan li.psec .cnt { font-weight:400 }
-.menu hr { border:0; border-top:1px solid var(--line); margin:4px 0 } .menu .mh { font-size:11px; color:var(--mute); padding:2px 14px; text-transform:uppercase; letter-spacing:.04em }
+.menu hr { border:0; border-top:1px solid var(--line); margin:4px 0 } .menu .mh { font-size:12px; font-weight:600; color:var(--mute); padding:2px 14px }
 .menu .mk { float:right; margin-left:18px; color:var(--mute); font-size:11px }
 @container task (width < 520px) {
   .plan li { grid-template-columns:3ch auto minmax(0, 1fr); grid-template-areas:"n st dep" "t t t" }
@@ -193,7 +193,6 @@ th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
 @container task (width >= 1800px) { .t-body { grid-template-columns:420px minmax(0, 1fr) } }
 .t-work { min-width:0 }
 /* шкала этапов: ширина отрезка — по числу пунктов, заливка — сделанное */
-.sb-cap { font-size:12px; color:var(--mute); margin:0 0 4px } .sb-cap b { color:var(--fg); font-weight:600 }
 .stagebar { display:flex; gap:3px; list-style:none; padding:0; margin:0 0 8px }
 .stagebar li { cursor:pointer } .stagebar li:hover { border-color:var(--mute) } .stagebar li.on { outline:2px solid var(--acc); outline-offset:1px }
 .sfil { display:flex; gap:10px; align-items:center; font-size:13px; color:var(--mute) }
@@ -206,7 +205,7 @@ th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
 @container task (width < 520px) { .stagebar li:not(.cur) { display:none } .stagebar .sn { display:inline; position:relative; margin-left:auto } }
 /* канбан по задачам */
 .kanban { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; align-items:start }
-.kcol h3 { margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mute) } .kcol h3 .cnt { font-weight:400 }
+.kcol h3 { margin:0 0 8px; font-size:13px; font-weight:600; color:var(--mute) } .kcol h3 .cnt { font-weight:400 }
 .kcol.wait h3 { color:var(--warn) } .kcol.blocked h3 { color:var(--bad) } .kcol.doing h3 { color:var(--acc) }
 .kcard { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:8px; cursor:pointer; display:grid; gap:4px }
 .kcard:hover { border-color:var(--acc) } .kh { display:flex; gap:6px; align-items:center; flex-wrap:wrap } .kh .live { color:var(--ok); margin-left:auto }
@@ -221,7 +220,7 @@ th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
 .subtabs .grow { flex:1 }
 /* форма «+ Задача»: вид, куда, поля, вложения перетаскиванием */
 .ntf { display:grid; gap:10px } .ntf label.sess { display:grid; gap:3px } .ntf label#ntaskl { display:flex; gap:6px; align-items:center }
-.ntf input[type=text], .ntf textarea { font:inherit; font-size:14px; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; resize:vertical }
+.ntf input[type=text], .ntf textarea { font:inherit; font-size:14px; color:var(--fg); background:var(--bg); border:1px solid var(--field); border-radius:6px; padding:6px 8px; resize:vertical }
 .ntrow { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center }
 .seg button { font:inherit; font-size:13px; border:0; background:none; color:var(--mute); padding:2px 10px; cursor:pointer }
 .seg button + button { border-left:1px solid var(--line) } .seg button[aria-pressed="true"] { color:var(--fg); background:var(--card) }
@@ -236,13 +235,13 @@ th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
 .dhead.fold { cursor:pointer; align-items:center } .row.inbox.folded .dhead { margin:0 }
 [hidden] { display:none !important }
 /* решённое скрыто: строка «› сделано: N» раскрывает */
-.more { cursor:pointer; user-select:none; font-size:12px; color:var(--mute) } .more:hover { color:var(--fg) }
+.more { display:inline-block; padding:4px 0; cursor:pointer; user-select:none; font-size:12px; color:var(--mute) } .more:hover { color:var(--fg) }
 .morep { margin:4px 0 6px }
-.plan li.psec { display:block; margin-top:8px; font-size:12px; font-weight:600; color:var(--mute); text-transform:uppercase; letter-spacing:.04em }
+.plan li.psec { display:block; margin-top:8px; font-size:13px; font-weight:600; color:var(--mute) }
 .plan li.later span:last-child { color:var(--mute) }
 /* доска объявлений: форма записи от лица владельца */
 .bf { display:flex; flex-wrap:wrap; gap:8px; align-items:center }
-.bf input, .bf select { font:inherit; font-size:13px; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:5px 8px }
+.bf input, .bf select { font:inherit; font-size:13px; color:var(--fg); background:var(--bg); border:1px solid var(--field); border-radius:6px; padding:5px 8px }
 .bf #btext { flex:1 1 320px; min-width:0 } .bf #bkey { width:90px } .bf #bhours { width:60px }
 .bf label { display:inline-flex; gap:6px; align-items:center } .row.dead { opacity:.6 }
 /* вопросы владельцу */
@@ -277,10 +276,10 @@ li.qa .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.05em; col
 .plan li.q.drafted::after { content:"К отправке"; grid-row:1; grid-column:-2; justify-self:end; font-size:11px; font-weight:600; padding:1px 7px; border-radius:10px; color:var(--ok); border:1px solid var(--ok); white-space:nowrap }
 .qa { grid-column:1 / -1; min-width:0; padding:2px 0 6px calc(3ch + 8px); display:grid; grid-template-columns:minmax(0, 1fr); gap:4px }
 .qa textarea.unsaved { border-color:var(--bad) } .btn.sm { font-size:12px; padding:1px 8px }
-.qa textarea { min-width:0 } h4.asks { margin:10px 0 2px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--mute); font-weight:600 }
+.qa textarea { min-width:0 } h4.asks { margin:10px 0 2px; font-size:13px; color:var(--mute); font-weight:600 }
 .plan li { min-width:0 } .plan li > span:last-of-type { min-width:0; overflow-wrap:anywhere }
 .qa .ans { white-space:pre-wrap; border-left:3px solid var(--acc); padding:2px 8px; background:var(--bg); border-radius:4px; font-size:13px }
-.qa textarea { width:100%; font:inherit; font-size:13px; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:4px 8px; resize:vertical; min-height:2.1em; overflow:hidden }
+.qa textarea { width:100%; font:inherit; font-size:13px; color:var(--fg); background:var(--bg); border:1px solid var(--field); border-radius:6px; padding:4px 8px; resize:vertical; min-height:2.1em; overflow:hidden }
 .qa textarea:focus { border-color:var(--acc) } .unread { color:var(--acc) }
 /* плашка вопроса, три уровня: поля плашки 8/10 px (как у прочих плашек); строки внутри — текст, совет, «Было»,
    ответы, варианты, поле — один шаг 6 px; всё содержимое — от левого края текста вопроса, справа — до одного края
@@ -304,22 +303,22 @@ p:has(> [data-act=submit]) { margin:12px 0 0 }
 .chip b { color:var(--fg); font-weight:600 } .chip.on { color:var(--acc); border-color:var(--acc) }
 .reph { display:flex; gap:10px; align-items:center; font-size:12.5px; color:var(--mute); min-height:26px }
 .reph label { white-space:nowrap; cursor:pointer }
-.reph input[type=text] { flex:1 1 auto; min-width:0; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:3px 8px }
+.reph input[type=text] { flex:1 1 auto; min-width:0; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--field); border-radius:6px; padding:3px 8px }
 .reph input[type=text]:focus { outline:none; border-color:var(--acc) }
-.btn { white-space:nowrap; font:inherit; font-size:13px; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:6px; padding:4px 10px; cursor:pointer }
+.btn { white-space:nowrap; font:inherit; font-size:13px; border:1px solid var(--field); background:var(--card); color:var(--fg); border-radius:6px; padding:4px 10px; cursor:pointer }
 .btn.primary { background:var(--acc); border-color:var(--acc); color:var(--bg); font-weight:600 } .btn:disabled { opacity:.6 }
 .btn.on { border-color:var(--acc); color:var(--acc) } .qrev { margin:2px 0 8px }
 /* блок с неотправленными черновиками: полоса слева во всю высоту, строка отправки липнет к низу экрана (вариант А) */
 .row.card.dirty { border-left:4px solid var(--acc) } .tag.draftn { color:var(--acc); border-color:var(--acc) }
 .qsubmit.stick { position:sticky; bottom:0; z-index:1; background:var(--card); border-top:1px solid var(--acc); margin:6px -16px -16px; padding:4px 16px 2px; border-radius:0 0 8px 8px }
 /* разделы вкладок внутри группы */
-.tabsec h2 { margin:14px 0 4px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--mute); cursor:pointer; user-select:none }
+.tabsec h2 { margin:14px 0 4px; font-size:13px; font-weight:600; color:var(--mute); cursor:pointer; user-select:none }
 .tabsec h2:hover { color:var(--fg) } .tabsec.static h2 { cursor:default } .tabsec.static h2:hover { color:var(--mute) }
 /* настройки (keepwarm): пунктир и мягкий фон — не похоже на плашку сессии */
 .row.kwg { background:var(--soft); border-style:dashed }
 .kwrule { display:flex; flex-wrap:wrap; gap:6px 12px; align-items:center; padding:6px 0; border-top:1px solid var(--line); font-size:13px; color:var(--mute) }
 .kwrule input[type=text] { width:9em } .kwrule input[type=number] { width:4em } .kwkinds { display:inline-flex; gap:8px; align-items:center }
-.kwrule input, .kwrule select { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:1px 4px }
+.kwrule input, .kwrule select { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--field); border-radius:6px; padding:1px 4px }
 .kwrules p.sess { margin:0 0 6px } .kwmove { display:inline-flex; gap:2px } .kwmove .ibtn:disabled { opacity:.35; cursor:default }
 .tabsec .cnt { font-weight:400; opacity:.8 }
 /* документы задачи и просмотр справа */
@@ -368,7 +367,7 @@ body.docpage header { display:none } body.docpage main { max-width:900px }
   <button class="ibtn" id="prefs" type="button" title="Вид: масштаб, ширина, тема" aria-haspopup="true">⚙</button>
 </div></header>
 <main id="main"><div id="list"><p class="empty">Загрузка…</p></div><div id="split" role="separator" aria-orientation="vertical" aria-label="Граница списка и предпросмотра: тянуть, стрелки, двойной щелчок — сброс" tabindex="0"></div><aside id="side"></aside></main>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <aside id="viewer" hidden aria-label="Просмотр документа"><div id="vgrip" title="Тянуть — ширина просмотра"></div>
   <div class="vh"><b id="vtitle"></b><a id="vtab" target="_blank" rel="noopener">в новой вкладке</a><button class="ibtn" id="vclose" type="button" title="Закрыть (Esc)">×</button></div>
   <div id="vbody"></div>
