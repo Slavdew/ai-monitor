@@ -109,7 +109,15 @@ async function post(source, action, args) {
   const r = await fetch(`/api/${source}/${action}`, { method: 'POST', body: JSON.stringify(args) });
   const j = await r.json();
   if (!r.ok) toast(j.error || 'Ошибка', 6000);
+  else freshen();
   return j;
+}
+// после своего действия — забрать состояние самой, не дожидаясь сигнала SSE: его держит одна вкладка, фоновую
+// браузер притормаживает, и «Зафиксировать» висело ~15 с (владелец 28.10). Сервер пересобирает сразу после действия.
+let freshT = [];
+function freshen() {
+  freshT.forEach(clearTimeout);
+  freshT = [150, 700, 2000].map((ms) => setTimeout(() => pull().catch(() => {}), ms));
 }
 function toast(text, ms = 1600) {
   const t = $('#toast');
@@ -1479,6 +1487,8 @@ if (DOC) {
     }, 5000);
   };
   const onRev = (rev) => { if (+rev !== state.rev) pull(); };
+  // вернулись на вкладку — сверить сразу: сигнал от приторможенной ведущей вкладки мог не дойти
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pull().catch(() => {}); });
   const bc = 'BroadcastChannel' in window ? new BroadcastChannel('tm-sse') : null;
   let leader = false;
   if (bc) {
