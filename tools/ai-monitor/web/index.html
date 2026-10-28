@@ -79,10 +79,9 @@ nav .x:hover { color:var(--bad); background:color-mix(in srgb, var(--bad) 12%, t
 .row.child::before { content:""; position:absolute; left:-17px; top:-7px; bottom:-7px; border-left:2px solid var(--tree) }
 .row.child.last::before { bottom:auto; height:28px }
 .row.child::after { content:""; position:absolute; left:-17px; top:19px; width:12px; border-top:2px solid var(--tree) }
-.row.child > .head::before { content:""; position:absolute; left:-7px; top:16px; width:8px; height:8px; border-radius:50%; background:var(--mute) }
+.row.child > .head::before { content:""; position:absolute; left:-20px; top:16px; width:8px; height:8px; border-radius:50%; background:var(--mute) }
 /* полоса подзадач под задачей: продолжение её карточки */
-.strip { position:relative; margin:-7px 0 6px; padding:3px 12px; border:1px solid var(--line); border-top:none;
-  border-radius:0 0 8px 8px; background:var(--bg); font-size:12px; color:var(--mute) }
+.strip { position:relative; margin:-3px 0 6px; padding:0 12px; font-size:12px; color:var(--mute) }   /* Н7: подпись под строкой родителя, без третьей рамки */
 .strip-head { cursor:pointer; user-select:none } .strip-head:hover { color:var(--fg) }
 .strip b { color:var(--fg); font-weight:600 }
 /* строка — в одну линию, пока влезает; не влезают чипы (много тегов, крупный масштаб, широкий
@@ -107,7 +106,7 @@ a.flink { color:var(--acc); text-decoration:underline dotted; text-underline-off
 .id { font-family:var(--font-mono); color:var(--mute); font-size:12px; user-select:all; white-space:nowrap }
 .title { font-weight:600 } .grow { flex:1 }
 .tag { font-size:11px; padding:1px 6px; border-radius:10px; border:1px solid var(--line); color:var(--mute); white-space:nowrap }
-.tag.ok { color:var(--ok); border-color:var(--ok) } .tag.par { color:var(--acc); border-color:var(--acc); border-style:dashed }
+.tag.ok { color:var(--ok); border-color:var(--ok) } .tag.bad { color:var(--bad); border-color:var(--bad) } .tag.par { color:var(--acc); border-color:var(--acc); border-style:dashed }
 #limits .stale { color:var(--mute) }
 .tag.active { color:var(--ok); border-color:var(--ok) } .tag.blocked, .tag.stale { color:var(--warn); border-color:var(--warn) }
 .tag.claim { color:var(--acc); border-color:var(--acc) } .tag.done { opacity:.6 } .tag.link { border-style:dashed }
@@ -258,14 +257,17 @@ li.qa .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.05em; col
 .qgroup { border:1px dashed var(--line); border-radius:8px; padding:4px 10px; margin:8px 0 }
 .qgh { display:flex; gap:10px; align-items:center; min-height:30px } .qgh .grow { flex:1 }
 .qgfold { border:0; background:none; color:var(--fg); font:inherit; font-weight:600; cursor:pointer; padding:2px 0 }
-.qslot { border:2px solid var(--acc); border-radius:8px; padding:6px 12px; margin:14px 0; background:var(--card); font-size:14px }
+.qslot { margin:14px 0; font-size:14px }   /* С6: без второй рамки — плашка вопроса и так выделена, над ней подпись */
 .qslot-h { font-size:11.5px; color:var(--acc); font-weight:700; letter-spacing:.05em; text-transform:uppercase; margin-bottom:2px }
 .qgdoc .md { max-width:none; padding:4px 4px 8px } .qgdoc .md img { max-width:100% }
 /* расширенный вопрос: описание и варианты плитками — имя, плюсы, минусы, «★ совет» */
 .qdet { font-size:13.5px; margin:4px 0 6px } .qdet img { max-width:100%; border-radius:6px }
-.qtiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:6px; width:100%; margin-top:6px }
+.qtiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap:6px; width:100%; margin-top:0 }   /* Н3: три в ряд и на 1000; С5: шаг — gap ряда */
 .qopt.qtile { display:flex; flex-direction:column; align-items:flex-start; gap:1px; text-align:left; border-radius:8px; padding:6px 10px; font-size:13px; line-height:1.35 }
-.qopt.qtile:hover { border-color:var(--acc) } .qopt.qtile.on { background:var(--card); color:var(--fg); border-color:var(--acc); box-shadow:0 0 0 1px var(--acc) inset }
+.qopt.qtile:hover { border-color:var(--acc) } .qopt.qtile { position:relative } .qopt.qtile:has(.qrec) { padding-right:4.5em }
+/* С4: выбранная плитка — заливка и галочка (не похоже на кольцо фокуса); «★ совет» — в углу, название не сдвигает */
+.qopt.qtile.on { background:color-mix(in srgb, var(--acc) 16%, var(--card)); color:var(--fg); border-color:var(--acc); box-shadow:none }
+.qopt.qtile.on > b::before { content:"✓ "; color:var(--acc) } .qtile .qrec { position:absolute; top:6px; right:10px }
 .qtile b { font-weight:600 } .qplus, .qminus { font-size:12.5px; color:var(--mute) } .qplus::before { content:"+ "; color:var(--ok) } .qminus::before { content:"− "; color:var(--warn) }
 .qrec { font-size:10.5px; color:var(--acc); font-weight:700; letter-spacing:.04em; text-transform:uppercase }
 .wbadge { display:inline-block; min-width:16px; padding:0 4px; border-radius:8px; background:var(--warn); color:var(--bg); font-size:11px; text-align:center }
@@ -306,7 +308,7 @@ p:has(> [data-act=submit]) { margin:12px 0 0 }
 .reph input[type=text] { flex:1 1 auto; min-width:0; font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--field); border-radius:6px; padding:3px 8px }
 .reph input[type=text]:focus { outline:none; border-color:var(--acc) }
 .btn { white-space:nowrap; font:inherit; font-size:13px; border:1px solid var(--field); background:var(--card); color:var(--fg); border-radius:6px; padding:4px 10px; cursor:pointer }
-.btn.primary { background:var(--acc); border-color:var(--acc); color:var(--bg); font-weight:600 } .btn:disabled { opacity:.6 }
+.btn.primary { background:var(--accbg, var(--acc)); border-color:var(--accbg, var(--acc)); color:var(--onacc, var(--bg)); font-weight:600 } .btn:disabled { opacity:.6 }
 .btn.on { border-color:var(--acc); color:var(--acc) } .qrev { margin:2px 0 8px }
 /* блок с неотправленными черновиками: полоса слева во всю высоту, строка отправки липнет к низу экрана (вариант А) */
 .row.card.dirty { border-left:4px solid var(--acc) } .tag.draftn { color:var(--acc); border-color:var(--acc) }
@@ -351,10 +353,70 @@ body.narrow .cgrid { grid-template-columns:1fr; grid-template-areas:"a" "p" "s" 
 .md { padding:4px 24px 40px; max-width:860px; margin:0 auto; overflow-wrap:anywhere }
 .md pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px; overflow:auto; font-size:13px }
 .md code { font-family:var(--font-mono); font-size:.92em }
-.md table { width:auto; border-collapse:collapse; display:block; overflow:auto } .md th, .md td { border:1px solid var(--line); padding:4px 8px }
+.md table { display:block; width:max-content; max-width:100%; border-collapse:collapse; overflow:auto }   /* В6: рамка по содержимому */ .md th, .md td { border:1px solid var(--line); padding:4px 8px }
 .md blockquote { margin:0; padding:2px 12px; border-left:3px solid var(--line); color:var(--mute) }
 .md img { max-width:100% } .md a { color:var(--acc) }
 body.docpage header { display:none } body.docpage main { max-width:900px }
+/* === аудит вида 29.10 === */
+/* В2: мягкий фон подсказок — не задан ни в одной теме; совет и ответ — по длине текста, без полос до правого края */
+:root { --soft:color-mix(in srgb, var(--acc) 8%, var(--card)) }
+.qa > .advice, .qa > .ans { justify-self:start; max-width:100% }
+/* В1: вопрос — «номер | текст | статус | К отправке»: статус справа, текст и ответ всегда с одной линии */
+.plan li.q, .plan li.q.drafted { grid-template-columns:3ch minmax(0, 1fr) auto auto; grid-template-areas:none }
+.plan li.q > .n { grid-column:1; grid-row:1 } .plan li.q > .t { grid-column:2; grid-row:1 }
+.plan li.q > .st { grid-column:3; grid-row:1; justify-self:end } .plan li.q > .dep { display:none }
+.plan li.q.drafted::after { grid-column:4; grid-row:1 }
+.plan li.q > .qa { grid-column:2 / -1 }
+@container task (width < 520px) { .plan li.q > .qa { grid-column:1 / -1 } }
+/* 241: отвеченный в «Ждут вас» — одной строкой, щелчок раскрывает */
+.plan li.q.qdone { cursor:pointer; align-items:baseline } .plan li.q.qdone:hover { border-color:var(--mute) }
+.qdone .qans { font-weight:600 } .qdone .st .linkbtn { font-size:12.5px }
+/* В3: шапка блока «Ждут вас» на телефоне переносится */
+body.narrow .inbox .dhead { flex-wrap:wrap; row-gap:4px } body.narrow .inbox .dhead .title { flex:1 1 100%; order:5 }
+/* С2: последние отступы карточки не копятся; пустая строка отправки не занимает места */
+.row.card .plan:last-child, .row.card .plan:last-child > li:last-child { margin-bottom:0; padding-bottom:0 }
+.qsubmit:empty { display:none }
+/* С3: полоса прокрутки не сдвигает раскладку */
+html { scrollbar-gutter:stable }
+/* С12: «Занято» — одна рамка (у таблицы), «Снять» — прижата вправо */
+.row.busy { padding:0; border:0; background:none } table.busy td.act { text-align:right; width:1%; white-space:nowrap }
+/* С7: строка отправки в карточке — в границах колонки работы */
+@container task (width >= 900px) { .t-work .qsubmit.stick { margin-left:0; margin-right:0; padding-left:0; padding-right:0 } }
+/* С1: план — одни столбцы на весь список (названия не «лесенкой») */
+.plan:not(:has(> li.q)) { display:grid; grid-template-columns:3ch auto auto minmax(0, 1fr); column-gap:8px }
+.plan:not(:has(> li.q)) > li { grid-column:1 / -1; grid-template-columns:subgrid }
+@container task (width < 520px) { .plan:not(:has(> li.q)) { display:block } .plan:not(:has(> li.q)) > li { grid-template-columns:3ch auto minmax(0, 1fr) } }
+/* С18: читаемая длина строки разбора (картинки — во всю ширину) */
+.qgdoc .md > :is(p:not(:has(img)), ul, ol, h1, h2, h3, blockquote) { max-width:80ch }
+/* В5: липнет только кнопка с пояснением; подсказка «агент ещё не видел» — обычным блоком под ней */
+.qsubmit.stick:not(:last-child) { margin-bottom:0; border-radius:0 }
+.qsubmit + .agenthint { margin:8px 0 0 }
+/* 240: общая строка «Зафиксировать (N)» внизу «Ждут вас»; у блоков — вторичная «Только эти (n)» */
+.qsubmit.qall { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; margin:8px 0 0; padding:8px 16px 10px; background:var(--card);
+  border:1px solid var(--line); border-top:2px solid var(--acc); border-radius:8px 8px 0 0 }
+.qsubmit.qall.stick { position:sticky; bottom:0; z-index:1; box-shadow:0 -4px 12px var(--shadow) }
+.inbox .qsubmit > p { margin:8px 0 0 }
+/* 242: справочные разделы «Ждут вас» — приглушённым заголовком, число подписью */
+.tabsec.ref h2 { font-weight:500; margin-top:20px } .tabsec.ref h2 .sess { font-size:inherit }
+/* С11: кнопка проверки актуальности переносится; лупа в строке задачи на телефоне не нужна — строка сама открывает карточку */
+.qrev .btn { white-space:normal; text-align:left; max-width:100% }
+body.narrow .row > .head > .go { display:none }
+.qgh { flex-wrap:wrap } body.narrow .qgh .sess { flex-basis:100%; order:5 }
+/* С10: кольцо фокуса в сегментных переключателях — внутрь, иначе его обрезает overflow:hidden */
+.seg button:focus-visible { outline-offset:-2px }
+/* С8: путь в «Сведениях» переносится только после «\» и «/» (<wbr>) */
+.kv dd code.path { overflow-wrap:normal }
+/* В7: шапка YAML документа — таблицей над текстом */
+.md .kv.fm { margin:8px 0 16px; padding:4px 12px; background:var(--bg); border:1px solid var(--line); border-radius:8px }
+/* Н5: «Переспросить проще» без плиток — ссылкой в конце ряда, не среди ответов */
+.qopt.rw.lnk { margin-left:auto; border-color:transparent; background:none; text-decoration:underline dotted; text-underline-offset:2px }
+.qopt.rw.lnk.on { background:var(--warn); border-color:var(--warn); color:var(--bg); text-decoration:none }
+/* 243: шкала этапов — единственный показатель хода; подпись «Этап 1 из 2 · осталось 19»; в карточке липнет под шапкой */
+.stagewrap { display:flex; gap:4px 10px; align-items:center; margin:0 0 8px } .stagewrap .stagebar { flex:1 1 auto; min-width:0; margin:0 }
+.stagecap { font-size:12px; color:var(--mute); white-space:nowrap }
+.task.card .stagewrap { position:sticky; top:calc(var(--hh, 49px) + var(--th, 49px)); z-index:1; background:var(--card); padding:6px 0; margin-top:-6px }
+.task.card .t-pass { top:calc(var(--hh, 49px) + var(--th, 49px) + 8px) }
+@container task (width < 520px) { .stagewrap { flex-wrap:wrap } .stagecap { flex-basis:100% } }
 </style>
 <script src="marked.min.js" defer></script>
 <script src="purify.min.js" defer></script>
