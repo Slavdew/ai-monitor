@@ -37,6 +37,9 @@ FAILS, PAUSE_SEC = 5, 600   # ошибок модуля подряд до пау
 OWNER_ONLY = {('tabs', 'draft'), ('tabs', 'submit'), ('tabs', 'request'), ('tabs', 'review'), ('claims', 'free'), ('tabs', 'create'), ('tabs', 'attach'), ('tabs', 'qaread')}
 
 WEB = os.path.join(HOME, 'web')
+# версия, с которой сервер запущен: ссылку current установщик переключает, а код в памяти остаётся прежним — сверять
+# надо по папке на момент запуска (28.10 старый сервер под админом пережил установку, а проверка видела новую)
+HOME_REAL = os.path.realpath(HOME)
 TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css'}
 TEXT_EXT = {'.md', '.markdown', '.txt', '.log', '.json', '.py', '.ps1', '.cmd', '.js', '.mjs', '.css', '.sh', '.cs', '.yml', '.yaml', '.xml', '.bsl'}
 
@@ -101,7 +104,7 @@ class Hub:
                     'on': module_on(self.cfg, n), 'error': r['error'], 'dir': r['dir']}
                 for n, r in modules(self.cfg).items()}
         # home — откуда запущен сервер: установщик сверяет, что на порту новая версия (28.10 старый сервер остался)
-        ctx_all = {**ctx, 'core': {'modules': mods, 'home': os.path.realpath(HOME)}}
+        ctx_all = {**ctx, 'core': {'modules': mods, 'home': HOME_REAL}}
         raw = json.dumps(ctx_all, ensure_ascii=False, sort_keys=True, default=str)
         digest = hashlib.sha1(raw.encode()).hexdigest()
         if digest != self.digest:
