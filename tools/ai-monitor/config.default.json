@@ -24,8 +24,8 @@
   "qa": { "enabled": true },
   "plan_statuses": ["todo", "doing", "done", "skip", "wait", "later"],
   "plan_mode": "sequential",
-  "_ui": "Вид страницы по умолчанию; владелец меняет в ⚙ (запоминает браузер). scale — масштаб (1 = 100 %), width — center|full, max_width — предел ширины при center, split — доля предпросмотра, theme — auto|light|dark, labels — подписи статусов плана",
-  "ui": { "scale": 1, "width": "center", "max_width": 1400, "split": 0.38, "theme": "auto", "look": "default",
+  "_ui": "Вид страницы по умолчанию; владелец меняет в ⚙ (запоминает браузер). scale — масштаб (1 = 100 %), width — center|full, max_width — предел ширины при center, split — доля предпросмотра, theme — auto|light|dark, look — тема оформления, qstyle — стиль вопросов: visual (наглядный: описание, варианты плитками) | compact (компактный: варианты кнопками), labels — подписи статусов плана",
+  "ui": { "scale": 1, "width": "center", "max_width": 1400, "split": 0.38, "theme": "auto", "look": "default", "qstyle": "visual",
           "labels": { "todo": "К работе", "doing": "В работе", "done": "Сделано", "skip": "Пропуск", "wait": "Ждёт вас", "later": "Отложено",
                       "active": "В работе", "paused": "Пауза", "busy": "Работает", "idle": "Ждёт" } },
 

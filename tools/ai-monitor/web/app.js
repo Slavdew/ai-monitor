@@ -182,7 +182,8 @@ function qaHtml(i, p, k, edit) {
   // расширенный вопрос: описание (details), ссылка к своему месту в разборе группы; совет — после описания
   const gdoc = p.group && ((i.groups || {})[p.group] || {}).doc;
   const toDoc = gdoc && !qInDoc ? ` <button class="linkbtn" data-act="qgopen" data-ref="${esc(i.tab + '|' + i.id + '|g:' + p.group)}" data-n="${k + 1}">к разделу разбора ›</button>` : '';
-  const details = p.details || toDoc ? `<div class="qdet mdx">${md(p.details, false, i)}${toDoc}</div>` : '';
+  const details = pref('qstyle') === 'compact' ? (toDoc ? `<div class="qdet">${toDoc}</div>` : '')
+    : p.details || toDoc ? `<div class="qdet mdx">${md(p.details, false, i)}${toDoc}</div>` : '';
   const advice = details + (p.note ? `<div class="advice"><span class="lbl">${p.act ? 'Пояснение' : 'Совет агента'}</span> ${md(p.note, true, i)}</div>` : '');
   const at = `data-key="${esc(key)}" data-dir="${esc(i.dir)}" data-index="${k}"`;
   const draft = drafts[key] ?? p.draft ?? '';
@@ -197,7 +198,7 @@ function qaHtml(i, p, k, edit) {
   if (!open) return `<div class="qa">${advice}${was}${answers}${asked}${status}${p.status === 'wait' ? `<span><button class="btn sm" data-act="show" data-key="add:${esc(key)}">Дополнить ответ</button></span>` : ''}</div>`;
   // у вопроса варианты — плитками (имя, плюсы, минусы, «★ совет»), у действия — кнопками; «Проще» и «Как советуешь»
   // — кнопками над ними; всё в одной группе выбора: один выбранный вариант на вопрос
-  const tiles = !p.act;
+  const tiles = !p.act && pref('qstyle') !== 'compact';   // стиль вопросов в ⚙: наглядный (плитки, описание) или компактный
   const opts = [['@reword', 'Вопрос непонятен — агент перепишет проще; в поле — что именно непонятно'],
     ...(p.note && !p.act ? [['@advice', 'ответ — совет агента; в поле — дополнение']] : []), ...(tiles ? [] : (p.opts || []).map((o) => [o, '']))];
   const chip = ([v, tip]) => `<button class="qopt${v === opt ? ' on' : ''}${v === '@reword' ? ' rw' : v === '@advice' ? ' adv' : ''}" role="radio" aria-checked="${v === opt}"
@@ -1507,6 +1508,7 @@ function prefsHtml() {
     <div><div class="lbl">Ширина</div>${seg('width', [['center', 'по центру'], ['full', 'во всю']])}</div>
     <div><div class="lbl">Тема</div>${seg('theme', [['auto', 'авто'], ['light', 'светлая'], ['dark', 'тёмная']])}</div>
     ${looks.length > 1 ? `<div><div class="lbl">Оформление</div>${seg('look', looks.map((t) => [t.name, esc(t.title)]))}</div>` : ''}
+    <div><div class="lbl">Стиль вопросов</div>${seg('qstyle', [['visual', 'наглядный'], ['compact', 'компактный']])}</div>
     <div><button class="btn" data-reset="1">Размеры по умолчанию</button></div></div>`;
 }
 $('#prefs').addEventListener('click', () => {
