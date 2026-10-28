@@ -134,7 +134,16 @@ def submit(cfg, args):
     return {'ok': True, 'sent': len(sent)}
 
 
-def request(cfg, args):
+REVIEW_TEXT = 'Проверить актуальность открытых вопросов'
+
+
+def review(cfg, args):
+    """Кнопка «Проверить актуальность» у вопросов: та же просьба, но вида review — хук даёт сессии задачи порядок
+    проверки; вторая, пока первая не закрыта, — ошибка."""
+    return request(cfg, {**args, 'text': REVIEW_TEXT}, kind='review')
+
+
+def request(cfg, args, kind='req'):
     """Просьба владельца со страницы: пункт req (блок «Ваши просьбы») с seen=false и запись в answers.json —
     агент увидит её хуком, в unseen и при take как непрочитанную и предложит разобрать; ack — прочитано."""
     text = ' '.join(str(args.get('text', '')).split())
@@ -145,17 +154,21 @@ def request(cfg, args):
 
     def fn(t):
         plan = t.setdefault('plan', [])
-        plan.append({'text': text, 'req': True, 'at': time.strftime('%Y-%m-%d'), 'seen': False, 'owner_at': at})
+        busy = [n for n, p in enumerate(plan, 1) if kind == 'review' and p.get('review') and p.get('status') not in ('done', 'skip')]
+        if busy:
+            raise ValueError(f'проверка уже запрошена — пункт {busy[0]}')
+        plan.append({'text': text, 'req': True, 'at': time.strftime('%Y-%m-%d'), 'seen': False, 'owner_at': at,
+                     **({'review': True} if kind == 'review' else {})})
         out['n'] = len(plan)
         out['tid'] = t.get('id') or os.path.basename(args['dir'])
         with locked(_pending_path(cfg)):   # до записи задачи, как в submit: не записалось — просьбы нет нигде
             pending = _pending(cfg)
-            pending[f'{out["tid"]}#{out["n"]}'] = {'dir': args['dir'], 'n': out['n'], 'q': text, 'answers': [], 'kind': 'req', 'at': at}
+            pending[f'{out["tid"]}#{out["n"]}'] = {'dir': args['dir'], 'n': out['n'], 'q': text, 'answers': [], 'kind': kind, 'at': at}
             write_json(_pending_path(cfg), pending)
     tabs.update_task(cfg, args['dir'], fn)
     tid = out['tid']
     with open(os.path.join(cfg['state_dir'], 'events.jsonl'), 'a', encoding='utf-8') as f:
-        f.write(json.dumps({'kind': 'req', 'task': tid, 'items': [out['n']], 'at': at}, ensure_ascii=False) + '\n')
+        f.write(json.dumps({'kind': kind, 'task': tid, 'items': [out['n']], 'at': at}, ensure_ascii=False) + '\n')
     return {'ok': True, 'n': out['n']}
 
 
@@ -193,6 +206,12 @@ def ack(cfg, dir_, nums, done=False):
 def _line(key, r):
     """Ответ строкой с готовой командой: ack a 5 done / set a 7 text="…" и ack."""
     tid, _, n = key.rpartition('#')
+    if r.get('kind') == 'review':
+        return (f'{key}: ВЛАДЕЛЕЦ ПРОСИТ ПРОВЕРИТЬ АКТУАЛЬНОСТЬ ОТКРЫТЫХ ВОПРОСОВ задачи → ack {tid} {n} (взял), '
+                f'set {tid} {n} status=doing; show {tid} — по каждому открытому вопросу: ответ уже есть (ответы панели, '
+                f'журнал, коммиты, другие пункты) — закрыть status=done с note «ответ: где»; вопрос потерял смысл после '
+                f'изменений — status=skip с причиной; актуален — note «проверено <дата>: актуален, потому что …», '
+                f'устарела формулировка — text=…; итог одной строкой — note пункта {n}, status=done')
     if r.get('kind') == 'req':
         return (f'{key}: НОВАЯ ПРОСЬБА ВЛАДЕЛЬЦА: {r["q"]} → предложи владельцу разобрать (взять в работу, '
                 f'уточнить или отложить), затем ack {tid} {n}')

@@ -405,6 +405,7 @@ function taskView(i, mode) {
   const answered = shown.has(ansKey) ? plan.map((p, k) => (p.status === 'wait' && !awaiting(p) ? row(p, k) : '')).join('') : '';
   const qPanel = `${waitQ ? `<ul class="plan">${waitQ}</ul>` : '<p class="sess">Вопросов, ждущих ответа, нет</p>'}
     ${card ? submitHtml(i) : ''}
+    ${card && waitQ ? `<p class="sess"><button class="btn" data-act="qreview" data-dir="${esc(i.dir)}" title="Агент задачи пройдёт по открытым вопросам: на что ответ уже есть и что потеряло смысл — закроет с причиной, остальное отметит проверенным">Проверить актуальность вопросов</button></p>` : ''}
     ${nAnswered ? `<p class="morep">${moreRow(ansKey, nAnswered, 'отвечено, ждёт агента')}</p>${answered ? `<ul class="plan">${answered}</ul>` : ''}` : ''}`;
 
   const doneKey = 'plan:' + ref, laterKey = 'later:' + ref;
@@ -1094,6 +1095,9 @@ document.addEventListener('click', async (e) => {
     const r = await post('tabs', 'submit', { dir: t.dataset.dir });
     for (const k of Object.keys(drafts)) if (k.startsWith(t.dataset.dir + '|')) delete drafts[k];
     if (r.ok) toast(`Зафиксировано: ${r.sent}`);
+  } else if (a === 'qreview') {
+    const r = await post('tabs', 'review', { dir: t.dataset.dir });
+    if (r.ok) toast(`Проверка записана пунктом ${r.n} — агент задачи увидит её при вашем следующем вводе`, 3000);
   } else if (a === 'qopt') {
     // вариант ответа: повторный щелчок снимает; старую галочку «проще» заменяет вариант
     const v = t.getAttribute('aria-checked') === 'true' ? '' : t.dataset.v;

@@ -34,7 +34,7 @@ def server_log(cfg, text):
 
 
 FAILS, PAUSE_SEC = 5, 600   # ошибок модуля подряд до паузы, длина паузы
-OWNER_ONLY = {('tabs', 'draft'), ('tabs', 'submit'), ('tabs', 'request'), ('claims', 'free'), ('tabs', 'create'), ('tabs', 'attach'), ('tabs', 'qaread')}
+OWNER_ONLY = {('tabs', 'draft'), ('tabs', 'submit'), ('tabs', 'request'), ('tabs', 'review'), ('claims', 'free'), ('tabs', 'create'), ('tabs', 'attach'), ('tabs', 'qaread')}
 
 WEB = os.path.join(HOME, 'web')
 TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css'}
