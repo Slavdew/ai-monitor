@@ -1113,6 +1113,12 @@ function renderLimits() {
 }
 
 let renderLater = false;
+// после фиксации — убрать фокус из поля ответа и перерисовать: выбор варианта ставит курсор в поле, кнопка фокус не
+// забирает, и render ждал ухода из поля — кнопка висела нажатой, будто фиксация не прошла (28.10, дважды)
+function afterSubmit() {
+  if (document.activeElement?.dataset?.act === 'draft') document.activeElement.blur();
+  render();
+}
 function render() {
   // не перерисовывать под пишущим владельцем: черновик потеряет фокус; дорисуем, когда уйдёт из поля
   const ae = document.activeElement;
@@ -1188,6 +1194,7 @@ document.addEventListener('click', async (e) => {
       return (kind === 'act') === !!((i?.plan || [])[+k] || {}).act; };
     for (const k of Object.keys(drafts)) if (k.startsWith(t.dataset.dir + '|') && mine(k)) delete drafts[k];
     if (r.ok) toast(`Зафиксировано: ${r.sent}`);
+    afterSubmit();
   } else if (a === 'qgopen') {   // разбор группы вопросов — вкладкой панели; data-n — сразу к рамке этого вопроса
     e.stopPropagation(); openCard(t.dataset.ref);
     const n = t.dataset.n;
@@ -1242,6 +1249,7 @@ document.addEventListener('click', async (e) => {
       sent += r.sent || 0;
     }
     toast(`отправлено: ${sent}`);
+    afterSubmit();
   } else if (a === 'bsay') {
     const mode = t.dataset.mode;
     let args;
