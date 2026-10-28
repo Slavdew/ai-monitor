@@ -73,6 +73,8 @@ TOPICS = {
       --opt — кнопки ответа, 2–4 коротких; «↺ проще» и «★ Как советуешь» страница добавит сама — рекомендацию
       вариантом не дублировать (со «★» ask отклонит): она в --note, варианты — альтернативы.
       Похожий открытый вопрос ask отклонит и назовёт номер — дополнить его set T N note=…; повторить — --force.
+      --blocking — без ответа работа стоит: красная метка «Блокирует работу», первым в «Ждут вас»;
+      снять или поставить потом — set T N blocking=true|null.
   Ответ приходит хуком («Панель задач: ответы владельца…») или unseen — строка с готовой командой:
       ack T N done          учёл и закрыл (ответ может менять и другие пункты — поправить план до ack)
       ПЕРЕФРАЗИРОВАТЬ → set T N text="проще", затем ack T N (статус не менять — вопрос ждёт дальше)
@@ -171,6 +173,7 @@ def parser():
         x.add_argument('--doc', default='')     # ask --group: разбор группы (.md с метками [[q:N]]) — вкладкой в панели
         x.add_argument('--details', default='')  # ask: описание вопроса (Markdown) — контекст, пример, картинка
         x.add_argument('--rec', default='')      # ask: вариант, который советуешь (плитка «★ совет»)
+        x.add_argument('--blocking', action='store_true')   # ask: без ответа работа стоит — красная метка, первым в «Ждут вас»
     st = sp('set'); st.add_argument('ref'); st.add_argument('rest', nargs='+')
     bt = sp('batch'); bt.add_argument('ref')
     ak = sp('ack'); ak.add_argument('ref'); ak.add_argument('n', nargs='+')
@@ -449,7 +452,7 @@ def _item_fields(pairs):
         k, v = m.group(1), m.group(3)
         if k not in tabs.ITEM_KEYS:
             raise ValueError(f'ключ {k}: у пункта допустимы {", ".join(tabs.ITEM_KEYS)} (поля задачи — set T ключ=… без N)')
-        out[k] = None if v == 'null' or (v == '' and k in ('note', 'section', 'who', 'group', 'details', 'rec')) else v
+        out[k] = None if v == 'null' or (v == '' and k in ('note', 'section', 'who', 'group', 'details', 'rec', 'blocking')) else v
     return out
 
 
@@ -540,7 +543,7 @@ def add(cfg, a):
             doc = os.path.normpath(a.doc if os.path.isabs(a.doc) else os.path.join(d, a.doc))
             if not os.path.isfile(doc):
                 raise ValueError(f'--doc: файла нет: {doc}')
-        extra = {k: v for k, v in (('group', a.group), ('details', a.details), ('rec', a.rec)) if v}
+        extra = {k: v for k, v in (('group', a.group), ('details', a.details), ('rec', a.rec), ('blocking', a.blocking)) if v}
         if a.rec and a.rec not in questions.split_opts(a.opt)[0]:
             raise ValueError(f'--rec «{a.rec}» — нет среди вариантов --opt')
         n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt, extra or None)

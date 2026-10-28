@@ -270,7 +270,7 @@ def _n(args):
     return int(args['index']) + 1
 
 
-ITEM_KEYS = ('text', 'status', 'note', 'section', 'who', 'after', 'group', 'details', 'rec')   # group — группа вопросов; details, rec — расширенный вопрос (null — убрать)
+ITEM_KEYS = ('text', 'status', 'note', 'section', 'who', 'after', 'group', 'details', 'rec', 'blocking')   # group — группа вопросов; details, rec — расширенный вопрос; blocking — без ответа работа стоит (null — убрать)
 
 
 def apply_item(cfg, plan, n, fields):
@@ -288,6 +288,13 @@ def apply_item(cfg, plan, n, fields):
                 raise ValueError(f'статус {v}: допустимы {", ".join(cfg["plan_statuses"])}')
             if v == 'wait' and not p.get('q'):
                 raise ValueError(f'пункт {n} — не вопрос: wait только у вопроса, новый вопрос — task.py ask')
+        elif k == 'blocking':   # флаг: true — есть, false / пусто — снять
+            if str(v).strip().lower() in ('', 'false', '0', 'no'):
+                p.pop(k, None)
+                continue
+            if str(v).strip().lower() not in ('true', '1', 'yes'):
+                raise ValueError(f'blocking={v}: допустимы true, false, null')
+            v = True
         elif k == 'after':
             v = after_list(v, len(plan), n)
         elif k == 'text':
