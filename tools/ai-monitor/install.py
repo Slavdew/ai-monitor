@@ -37,6 +37,8 @@ GUARD = os.path.join(CURRENT, 'tools', 'guards', 'guard.py')
 PITFALLS = os.path.join(CURRENT, 'tools', 'guards', 'pitfalls.py')
 STATUS = os.path.join(RUN, 'modules', 'usage', 'statusline.py')
 PY = sys.executable   # полный путь: py.exe — лишний процесс (аудит граблей: 35 мс против 80–117)
+PYW = os.path.join(os.path.dirname(PY), 'pythonw.exe')   # трей — без окна консоли (launch.pyw)
+PYW = PYW if os.path.exists(PYW) else PY
 
 
 def wrapped(path, *args, swallow2=False):
@@ -218,11 +220,12 @@ def ps(cmd):
 
 
 def autostart():
-    start = os.path.join(RUN, 'start.cmd')
+    # pythonw + launch.pyw, не start.cmd: окно консоли при Windows Terminal не скрывается (28.10)
+    launch = os.path.join(RUN, 'launch.pyw')
     r = ps("$s=[Environment]::GetFolderPath('Startup');"
            "Remove-Item -LiteralPath (Join-Path $s 'task-monitor.lnk') -ErrorAction SilentlyContinue;"
            "$l=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $s 'ai-monitor.lnk'));"
-           f"$l.TargetPath='{start}';$l.Arguments='/silent';$l.WorkingDirectory='{RUN}';$l.WindowStyle=7;$l.Save()")
+           f"$l.TargetPath='{PYW}';$l.Arguments='\"{launch}\" /silent';$l.WorkingDirectory='{RUN}';$l.Save()")
     print('автозагрузка: ai-monitor.lnk' if r.returncode == 0 else f'автозагрузка не создана: {r.stderr.strip()[:200]}')
 
 
@@ -234,7 +237,7 @@ def restart_server():
        "$_.CommandLine -notmatch 'install\\.py' -and $_.ProcessId -ne $PID } | ForEach-Object { Stop-Process "
        "-Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
     time.sleep(1)
-    subprocess.Popen(['cmd', '/c', os.path.join(RUN, 'start.cmd'), '/silent'], cwd=RUN,
+    subprocess.Popen([PYW, os.path.join(RUN, 'launch.pyw'), '/silent'], cwd=RUN,
                      creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     # проверка: на порту — сервер из current (сравнение по папке, которую сервер сам сообщает в state.json)
     import gzip

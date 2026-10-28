@@ -254,6 +254,8 @@ function agentHint(i) {
 const submitInner = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Зафиксировать ответы (${nDraftOf(i)})</button>
       <span class="sess">Черновики видны только вам, пока не зафиксированы</span></p>` : '') + agentHint(i);
 // контейнер есть всегда: пока фокус в поле ответа, render отложен — кнопку обновляет refreshSubmit на месте
+// «Проверить актуальность вопросов» — в карточке и в «Ждут вас»: просьба review, её возьмёт сессия задачи
+const reviewBtn = (i) => `<p class="sess"><button class="btn" data-act="qreview" data-dir="${esc(i.dir)}" title="Агент задачи пройдёт по открытым вопросам: на что ответ уже есть и что потеряло смысл — закроет с причиной, остальное отметит проверенным">Проверить актуальность вопросов</button></p>`;
 const submitHtml = (i) => `<div class="qsubmit" data-dir="${esc(i.dir)}">${submitInner(i)}</div>`;
 function refreshSubmit(dir) {
   const i = items().find((x) => x.dir === dir);
@@ -405,7 +407,7 @@ function taskView(i, mode) {
   const answered = shown.has(ansKey) ? plan.map((p, k) => (p.status === 'wait' && !awaiting(p) ? row(p, k) : '')).join('') : '';
   const qPanel = `${waitQ ? `<ul class="plan">${waitQ}</ul>` : '<p class="sess">Вопросов, ждущих ответа, нет</p>'}
     ${card ? submitHtml(i) : ''}
-    ${card && waitQ ? `<p class="sess"><button class="btn" data-act="qreview" data-dir="${esc(i.dir)}" title="Агент задачи пройдёт по открытым вопросам: на что ответ уже есть и что потеряло смысл — закроет с причиной, остальное отметит проверенным">Проверить актуальность вопросов</button></p>` : ''}
+    ${card && waitQ ? reviewBtn(i) : ''}
     ${nAnswered ? `<p class="morep">${moreRow(ansKey, nAnswered, 'отвечено, ждёт агента')}</p>${answered ? `<ul class="plan">${answered}</ul>` : ''}` : ''}`;
 
   const doneKey = 'plan:' + ref, laterKey = 'later:' + ref;
@@ -945,7 +947,7 @@ function renderInbox() {
     rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
         ${n ? `<span class="tag wait">Вопросы: ${n}</span>` : ''}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
-        ${open ? `<ul class="plan">${asks}</ul>${submitHtml(i)}` : ''}` });
+        ${open ? `<ul class="plan">${asks}</ul>${submitHtml(i)}${n ? reviewBtn(i) : ''}` : ''}` });
   }
   // просьбы владельца ждут агента, не его — внизу свёрнутой строкой, чтобы видеть неразобранное
   const n = withReq.reduce((s, i) => s + nReq(i), 0);
