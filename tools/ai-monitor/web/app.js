@@ -212,13 +212,15 @@ function qaHtml(i, p, k, edit) {
       ${awaiting(p) ? `<span><button class="btn sm" data-act="answer" data-ref="${esc(i.tab + '|' + i.id)}" data-k="${k}">Ответить ↗</button></span>` : ''}</div>`;
   }
   const open = awaiting(p) || draft || opt || shown.has('add:' + key);
-  if (!open) return `<div class="qa">${advice}${was}${answers}${asked}${status}${p.status === 'wait' ? `<span><button class="btn sm" data-act="show" data-key="add:${esc(key)}">Дополнить ответ</button></span>` : ''}</div>`;
+  if (!open) return `<div class="qa">${advice}${was}${answers}${asked}${status}${p.status === 'wait' ? `<span><button class="btn sm" data-act="show" data-key="add:${esc(key)}">Дополнить ответ</button>${shown.has('qx:' + key) ? ` <button class="linkbtn" data-act="show" data-key="qx:${esc(key)}">Свернуть</button>` : ''}</span>` : ''}</div>`;
   // у вопроса варианты — плитками (имя, плюсы, минусы, «★ совет»), у действия — кнопками; «Проще» и «Как советуешь»
   // — кнопками над ними; всё в одной группе выбора: один выбранный вариант на вопрос
   const tiles = !p.act && pref('qstyle') !== 'compact';   // стиль вопросов в ⚙: наглядный (плитки, описание) или компактный
-  const opts = [['@reword', 'Вопрос непонятен — агент перепишет проще; в поле — что именно непонятно'],
-    ...(p.note && !p.act ? [['@advice', 'ответ — совет агента; в поле — дополнение']] : []), ...(tiles ? [] : (p.opts || []).map((o) => [o, '']))];
-  const chip = ([v, tip]) => `<button class="qopt${v === opt ? ' on' : ''}${v === '@reword' ? ' rw' : v === '@advice' ? ' adv' : ''}" role="radio" aria-checked="${v === opt}"
+  // без плиток (компактный стиль, действие) «Переспросить проще» — ссылкой в конце ряда: не похоже на один из ответов (Н5)
+  const rw = ['@reword', 'Вопрос непонятен — агент перепишет проще; в поле — что именно непонятно'];
+  const opts = [...(tiles ? [rw] : []),
+    ...(p.note && !p.act ? [['@advice', 'ответ — совет агента; в поле — дополнение']] : []), ...(tiles ? [] : [...(p.opts || []).map((o) => [o, '']), rw])];
+  const chip = ([v, tip]) => `<button class="qopt${v === opt ? ' on' : ''}${v === '@reword' ? ' rw' + (tiles ? '' : ' lnk') : v === '@advice' ? ' adv' : ''}" role="radio" aria-checked="${v === opt}"
       data-act="qopt" ${at} data-v="${esc(v)}"${tip ? ` title="${esc(tip)}"` : ''}>${esc(optName(v))}</button>`;
   const tile = (o) => { const d = (p.optd || {})[o] || {};
     return `<button class="qopt qtile${o === opt ? ' on' : ''}" role="radio" aria-checked="${o === opt}" data-act="qopt" ${at} data-v="${esc(o)}">${p.rec === o ? '<span class="qrec">★ совет</span>' : ''}<b>${esc(o)}</b>${d.plus ? `<span class="qplus">${md(d.plus, true, i)}</span>` : ''}${d.minus ? `<span class="qminus">${md(d.minus, true, i)}</span>` : ''}</button>`; };
@@ -248,19 +250,33 @@ async function saveDraft(el) {
   if (!r.ok) draftTimers[el.dataset.key] = -1;   // отметка «не сохранено»: уход из поля и отправка повторят запись
 }
 
+// блокирующий вопрос (ask --blocking): без ответа работа стоит — красная метка везде, первым в «Ждут вас»
+const isBlocking = (p) => !!p.blocking && p.q && p.status === 'wait';
+const blockTag = (p) => (isBlocking(p) ? '<span class="tag bad" title="Без ответа на этот вопрос работа по задаче стоит">Блокирует работу</span> ' : '');
+const nBlock = (i) => (i.plan || []).filter((p) => isBlocking(p) && awaiting(p)).length;
+const blockChip = (i) => (nBlock(i) ? '<span class="tag bad" title="Вопрос, без ответа на который работа стоит">Ждёт ответа: блокирует</span>' : '');
 // пункт плана; full — карточка: статус меняется меню (в предпросмотре легко задеть случайно);
 // answer — поле ответа у вопроса (карточка и «Ждут вас»)
 // inActs — в блоке «Ожидаемые действия»: метка «Действие» там лишняя; inGroup — внутри своей группы: метка группы лишняя
 function planRow(i, p, k, full, answer = full, inActs = false, inGroup = false) {
   const mark = p.state === 'waiting' ? `<span class="dep wait" title="Ждёт пунктов">⏳ После ${p.waits.join(', ')}</span>`
     : p.parallel && full && !p.req && p.state === 'ready' ? '<span class="dep"><span class="tag par" title="Можно вести одновременно с другими готовыми">Можно параллельно</span></span>' : '<span class="dep"></span>';
-  // в «Ждут вас» (без меню статусов, с полем ответа) всё и так ждёт вас — метка «Ждёт вас» там лишняя
-  const st = p.status === 'wait' ? (awaiting(p) ? (!full && answer ? '<span class="st" aria-hidden="true"></span>' : `<span class="tag st wait" title="Вопрос: ждёт вашего ответа">${esc(label('wait'))}</span>`)
+  // ожидание видно по полю ответа и счётчику вкладки — метка «Ждёт вас» лишняя везде (245); помечаются исключения: «Отвечено»
+  const key = i.dir + '|' + k;
+  // отвеченный в «Ждут вас» — одной строкой «вопрос → «ответ» · время · ждёт агента · Дополнить»; щелчок раскрывает (241)
+  if (p.q && p.status === 'wait' && !awaiting(p) && !full && answer && !qInDoc && !shown.has('qx:' + key) && !shown.has('add:' + key) && !hasDraft(i, p, k)) {
+    const a = (p.answers || []).at(-1), ans = a ? `«${esc(a.text)}»` : p.rephrase ? `просили проще${p.rephrase.text !== 'проще' ? `: «${esc(p.rephrase.text)}»` : ''}` : '';
+    const at = (a || p.rephrase || {}).at, seen = p.seen === false ? 'ждёт агента' : p.seen ? 'принято агентом' : '';
+    return `<li class="q qdone" data-act="show" data-key="qx:${esc(key)}" tabindex="0" role="button" aria-expanded="false" title="Показать ответ целиком"><span class="n">${k + 1}</span>
+      <span class="t">${blockTag(p)}${p.group && !inGroup ? `<span class="tag doc">${esc(p.group)}</span> ` : ''}${md(p.text, true, i)}${ans ? ` → <span class="qans">${ans}</span>` : ''}<span class="sess">${at ? ' · ' + esc(fmtTime(at)) : ''}${seen ? ' · ' + seen : ''}</span></span>
+      <span class="st"><button class="linkbtn" data-act="show" data-key="add:${esc(key)}">Дополнить</button></span></li>`;
+  }
+  const st = p.status === 'wait' ? (awaiting(p) ? '<span class="st" aria-hidden="true"></span>'
       : '<span class="tag st ok" title="Ответ отправлен, ждёт агента">Отвечено</span>')
     : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="Сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req && !openReq(p) ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${p.group && !inGroup ? `<button class="tag doc" data-act="qgopen" data-ref="${esc(i.tab + '|' + i.id + '|g:' + p.group)}" title="Вопрос из группы — открыть разбор">${esc(p.group)}</button> ` : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}" data-dur="1"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Переспросить проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${blockTag(p)}${p.req && !openReq(p) ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${p.group && !inGroup ? `<button class="tag doc" data-act="qgopen" data-ref="${esc(i.tab + '|' + i.id + '|g:' + p.group)}" title="Вопрос из группы — открыть разбор">${esc(p.group)}</button> ` : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}" data-dur="1"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Переспросить проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i, kind = '') => (i.plan || []).filter((p, k) => (!kind || (kind === 'act') === !!p.act)
   && ((drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k))).length
@@ -283,9 +299,23 @@ function agentHint(i) {
   const copy = s ? copyBtn(PING_PHRASE, `«${PING_PHRASE}»`) : (i.resume ? copyBtn(i.resume, 'Команда продолжения') : '');
   return `<div class="agenthint"><span class="sess">Зафиксировано ${n}, агент ещё не видел.</span> ${where} ${copy}</div>`;
 }
-// kind — блок «Ждут вас»: act — только действия, q — только вопросы (и проверка актуальности); пусто — всё (карточка)
-const submitInner = (i, kind = '') => (nDraftOf(i, kind) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}" data-kind="${kind}">Зафиксировать ответы (${nDraftOf(i, kind)})</button>
-      <span class="sess">Черновики видны только вам, пока не зафиксированы</span></p>` : '') + agentHint(i);
+// kind — блок «Ждут вас»: act — только действия, q — только вопросы (и проверка актуальности); пусто — всё (карточка).
+// inbox — блок «Ждут вас»: основная кнопка там одна, общей строкой внизу (240); у блока — вторичная «Только эти (n)»,
+// когда блоков с черновиками больше одного. Подсказка «агент ещё не видел» — не в липкой строке, а под ней (В5)
+const nDirtyBlocks = () => items().reduce((s, i) => s + (nDraftOf(i, 'act') ? 1 : 0) + (nDraftOf(i, 'q') ? 1 : 0), 0);
+const submitInner = (i, kind = '', inbox = false) => {
+  const n = nDraftOf(i, kind);
+  if (!n) return '';
+  if (inbox) return nDirtyBlocks() > 1 ? `<p><button class="btn" data-act="submit" data-dir="${esc(i.dir)}" data-kind="${kind}" title="Зафиксировать ответы только этого блока">Только эти (${n})</button></p>` : '';
+  return `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}" data-kind="${kind}">Зафиксировать ответы (${n})</button>
+      <span class="sess">Черновики видны только вам, пока не зафиксированы</span></p>`;
+};
+// общая строка «Ждут вас»: все черновики всех задач одной кнопкой
+const submitAllInner = () => {
+  const ds = items().filter((i) => nDraftOf(i)), n = ds.reduce((s, i) => s + nDraftOf(i), 0);
+  return n ? `<button class="btn primary" data-act="submitall">Зафиксировать (${n})</button>
+    <span class="sess">ответы по ${ds.length} ${plural(ds.length, 'задаче', 'задачам', 'задачам')} · черновики видны только вам, пока не зафиксированы</span>` : '';
+};
 const draftTag = (i, kind) => `<span class="tag draftn"${nDraftOf(i, kind) ? '' : ' hidden'}>Не отправлено: ${nDraftOf(i, kind)}</span>`;
 // контейнер есть всегда: пока фокус в поле ответа, render отложен — кнопку обновляет refreshSubmit на месте
 // «Проверить актуальность вопросов» — под шапкой вопросов в карточке и в «Ждут вас». Черновик, как ответ: уходит
@@ -293,14 +323,17 @@ const draftTag = (i, kind) => `<span class="tag draftn"${nDraftOf(i, kind) ? '' 
 const reviewOn = (i) => drafts[i.dir + '|review'] ?? i.review_draft ?? false;
 const reviewBtn = (i) => `<p class="sess qrev"><button class="btn${reviewOn(i) ? ' on' : ''}" data-act="qreview" data-dir="${esc(i.dir)}" aria-pressed="${reviewOn(i)}" title="Агент задачи пройдёт по открытым вопросам: на что ответ уже есть и что потеряло смысл — закроет с причиной, остальное отметит проверенным. Уйдёт с «Зафиксировать ответы»; повторный щелчок — отменить">${reviewOn(i) ? '✓ Проверка актуальности — уйдёт с «Зафиксировать»' : 'Проверить актуальность вопросов'}</button></p>`;
 // строка отправки липнет к низу экрана, пока виден блок с черновиками; блок — полоса слева во всю высоту (вариант А, 189)
-const submitHtml = (i, kind = '') => `<div class="qsubmit${nDraftOf(i, kind) ? ' stick' : ''}" data-dir="${esc(i.dir)}" data-kind="${kind}">${submitInner(i, kind)}</div>`;
-function refreshSubmit(dir) {
-  const i = items().find((x) => x.dir === dir);
-  if (!i) return;
-  document.querySelectorAll(`.qsubmit[data-dir="${CSS.escape(dir)}"]`).forEach((el) => {
-    const kind = el.dataset.kind || '', n = nDraftOf(i, kind), html = submitInner(i, kind);
+const submitHtml = (i, kind = '', inbox = false) => `<div class="qsubmit${!inbox && nDraftOf(i, kind) ? ' stick' : ''}" data-dir="${esc(i.dir)}" data-kind="${kind}"${inbox ? ' data-inbox="1"' : ''}>${submitInner(i, kind, inbox)}</div>`;
+// все строки отправки на экране: черновик одного блока меняет и общую строку, и «Только эти» у соседних блоков
+function refreshSubmit() {
+  const all = document.querySelector('.qsubmit.qall');
+  if (all) { const html = submitAllInner(); if (all._h !== html) { all.innerHTML = html; all._h = html; all._html = undefined; } all.classList.toggle('stick', !!html); }
+  document.querySelectorAll('.qsubmit[data-dir]').forEach((el) => {
+    const i = items().find((x) => x.dir === el.dataset.dir);
+    if (!i) return;
+    const kind = el.dataset.kind || '', inbox = !!el.dataset.inbox, n = nDraftOf(i, kind), html = submitInner(i, kind, inbox);
     if (el._h !== html) { el.innerHTML = html; el._h = html; }   // только при изменении: пересозданная кнопка теряет щелчок
-    el.classList.toggle('stick', !!n);
+    el.classList.toggle('stick', !inbox && !!n);
     const row = el.closest('.row');
     row?.classList.toggle('dirty', !!n);
     const tag = row?.querySelector('.draftn');
@@ -407,9 +440,12 @@ function stageBar(i, ref) {
     .map((p) => `${p.state === 'done' || p.state === 'skip' ? '✓' : p.status === 'doing' ? '●' : '·'} ${plain(p.text)}`).slice(0, 12).join('\n')
     + (x.total > 12 ? `\n… ещё ${x.total - 12}` : '') + '\nЩелчок — все пункты этапа';
   // текущий этап и так выделен на шкале; как ей пользоваться — в подсказке, а не постоянной строкой
-  return `<ol class="stagebar" aria-label="Этапы — разделы плана; щелчок по этапу показывает его пункты">${ss.map((x) => `<li class="${x.st}${sfil[ref] === x.name ? ' on' : ''}" title="${esc(tip(x))}" data-act="stage" data-ref="${esc(ref)}" data-v="${esc(x.name)}" tabindex="0" role="button" aria-pressed="${sfil[ref] === x.name}">
+  // подпись — единственный счётчик хода задачи в карточке: «Этап 1 из 2 · осталось 19» (243); шкала липнет под шапкой
+  const cur = ss.find((x) => x.st === 'cur');
+  const caption = [cur && `Этап ${cur.n} из ${cur.of}`, i.remain != null && (i.remain ? `осталось ${i.remain}` : 'всё сделано')].filter(Boolean).join(' · ');
+  return `<div class="stagewrap"><ol class="stagebar" aria-label="Этапы — разделы плана; щелчок по этапу показывает его пункты">${ss.map((x) => `<li class="${x.st}${sfil[ref] === x.name ? ' on' : ''}" title="${esc(tip(x))}" data-act="stage" data-ref="${esc(ref)}" data-v="${esc(x.name)}" tabindex="0" role="button" aria-pressed="${sfil[ref] === x.name}">
     <i style="width:${Math.round(100 * x.done / x.total)}%"></i><span class="nm">${x.st === 'done' ? '✓ ' : x.st === 'cur' ? '● ' : ''}${esc(x.name)}</span>
-    <b>${x.done}/${x.total}</b>${x.st === 'cur' ? `<span class="sn">Этап ${x.n}/${x.of}</span>` : ''}</li>`).join('')}</ol>`;
+    <b>${x.done}/${x.total}</b></li>`).join('')}</ol>${caption ? `<span class="stagecap" title="Осталось пунктов плана: к работе, в работе, вопросы">${caption}</span>` : ''}</div>`;
 }
 
 const remainTag = (i) => (i.remain == null ? '' : `<span class="sess remain" title="Осталось пунктов плана: к работе, в работе, вопросы">${i.remain ? 'Осталось ' + i.remain : 'Всё сделано'}</span>`);
@@ -427,9 +463,11 @@ function taskView(i, mode) {
   const s = liveSessions(i.id);
   const names = (src('sessions').list || []).filter((x) => x.alive && x.task === i.id).map((x) => esc(x.title || x.sid.slice(0, 8)));
 
+  // прогресс — только шкалой этапов с подписью «Этап 1 из 2 · осталось 19» (243); без шкалы (этап один) — в шапке, как в строке
+  const sbar = stageBar(i, ref);
   const head = `<div class="t-head">${prioTag(i)}<span class="id">${esc(i.id)}</span><span class="title" title="${esc(i.title)}">${esc(i.title)}</span>
-    <span class="t-chips">${healthTag(i)}${stageTag(i)}${remainTag(i)}${i.status ? `<span class="tag ${esc(i.status)}">${esc(label(i.status))}</span>` : ''}
-    ${i.percent != null ? `<span class="bar" title="${i.percent}%"><i style="width:${i.percent}%"></i></span>` : ''}</span>
+    <span class="t-chips">${healthTag(i)}${blockChip(i)}${sbar ? '' : stageTag(i) + remainTag(i)}${i.status ? `<span class="tag ${esc(i.status)}">${esc(label(i.status))}</span>` : ''}
+    ${!sbar && i.percent != null ? `<span class="bar" title="${i.percent}%"><i style="width:${i.percent}%"></i></span>` : ''}</span>
     <span class="t-act"><button class="btn" data-act="reqnew" data-ref="${esc(ref)}" title="Записать просьбу по задаче: агент увидит её непрочитанной и предложит разобрать">+ Просьба</button>${i.resume ? copyBtn(i.resume, 'Продолжить') : ''}${card ? '' : cardBtn(i)}</span></div>
     ${reqOpen.has(ref) ? `<div class="reqnew"><textarea data-act="reqtext" data-ref="${esc(ref)}" rows="2" placeholder="Просьба своими словами — Ctrl+Enter записать, Esc закрыть">${esc(reqDraft[ref] || '')}</textarea>
       <button class="btn primary" data-act="reqsave" data-ref="${esc(ref)}" data-dir="${esc(i.dir)}">Записать</button></div>` : ''}`;
@@ -450,7 +488,7 @@ function taskView(i, mode) {
   const ansKey = 'ans:' + ref;
   const answered = shown.has(ansKey) ? plan.map((p, k) => (p.status === 'wait' && !awaiting(p) ? row(p, k) : '')).join('') : '';
   const qPanel = `${card && waitQ ? reviewBtn(i) : ''}${waitQ ? `<ul class="plan">${waitQ}</ul>` : '<p class="sess">Вопросов, ждущих ответа, нет</p>'}
-    ${card ? submitHtml(i) : ''}
+    ${card ? submitHtml(i) + agentHint(i) : ''}
     ${nAnswered ? `<p class="morep">${moreRow(ansKey, nAnswered, 'отвечено, ждёт агента')}</p>${answered ? `<ul class="plan">${answered}</ul>` : ''}` : ''}`;
 
   const doneKey = 'plan:' + ref, laterKey = 'later:' + ref;
@@ -479,7 +517,7 @@ function taskView(i, mode) {
     const rows = open || sf ? plan.map((p, k) => ((p.section || '') === x && vis(p) ? row(p, k) : '')).join('') : '';
     if (!x || sf) return rows;
     const n = plan.filter((p) => (p.section || '') === x && visible(p)).length;
-    return n ? `<li class="psec" data-act="fold" data-id="${esc(sk)}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}${esc(x)} <span class="cnt">${n}</span></li>${rows}` : '';
+    return n ? `<li class="psec" data-act="fold" data-id="${esc(sk)}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}${esc(x)} <span class="cnt">· ${n} ${plural(n, 'пункт', 'пункта', 'пунктов')}</span></li>${rows}` : '';
   }).join('');
   const reqs = plan.map((p, k) => (openReq(p) ? row(p, k) : '')).join('');
   const pPanel = sf ? `<p class="sfil">Этап «${esc(sf)}» — все его пункты <button class="btn sm" data-act="stage" data-ref="${esc(ref)}" data-v="">× Все этапы</button></p>
@@ -509,9 +547,11 @@ function taskView(i, mode) {
   const sidCode = (sid) => `<code class="copy" data-copy="${esc(sid)}" tabindex="0" title="${esc(sid)} — скопировать id сессии">${esc(sid.slice(0, 8))}</code>`;
   const sessRows = live.map((x) => `<li><b>${esc(x.title || x.sid.slice(0, 8))}</b> <span class="tag ${x.status === 'busy' ? 'active' : ''}">${esc(label(x.status))}</span> ${agoSpan(x.last)} ${sidCode(x.sid)}</li>`).join('')
     + (i.session && !live.some((x) => x.sid === i.session) ? `<li>${sidCode(i.session)} <span class="sess">не запущена</span></li>` : '');
+  // путь переносится только после «\» и «/», не посреди слова (С8)
+  const wbr = (s) => esc(s).replace(/([\\/])/g, '$1<wbr>');
   const kv = [
-    ['Продолжить', i.resume && `<code class="copy" data-copy="${esc(i.resume)}" tabindex="0" title="Скопировать">${esc(i.resume)}</code>`],
-    ['Каталог', `<code class="copy" data-copy="${esc(i.dir)}" tabindex="0" title="Скопировать">${esc(i.dir)}</code>`],
+    ['Продолжить', i.resume && `<code class="copy path" data-copy="${esc(i.resume)}" tabindex="0" title="Скопировать">${wbr(i.resume)}</code>`],
+    ['Каталог', `<code class="copy path" data-copy="${esc(i.dir)}" tabindex="0" title="Скопировать">${wbr(i.dir)}</code>`],
     ['Связи', links],
     ['Передача', i.updated && `<span title="${esc(i.updated)}">${esc(stampText(i.updated))}</span>` + (i.stale ? ` · новее неё файлов: ${i.stale}` : '')],
     [live.length > 1 ? 'Сессии' : 'Сессия', sessRows && `<ul class="slist">${sessRows}</ul>`],
@@ -529,7 +569,7 @@ function taskView(i, mode) {
     data-act="ctab" data-ref="${esc(ref)}" data-v="${t.id}">${t.title}${t.n ? ` <b class="${t.tone || ''}">${t.n}</b>` : ''}</button>`).join('')}</div>`;
   // вариант B: паспорт задачи слева (вспомнить), работа справа (шкала этапов, вкладки); на узком — друг под другом
   return `<article class="task ${mode}" data-ref="${esc(ref)}">${head}<div class="t-body"><div class="t-pass">${summary}${info}</div>
-    <div class="t-work">${stageBar(i, ref)}${bar}<div class="t-panel" role="tabpanel">${tabs.find((t) => t.id === cur).html}</div></div></div></article>`;
+    <div class="t-work">${sbar}${bar}<div class="t-panel" role="tabpanel">${tabs.find((t) => t.id === cur).html}</div></div></div></article>`;
 }
 
 function itemRow(i, child, kids, last) {
@@ -542,7 +582,7 @@ function itemRow(i, child, kids, last) {
       ${prioTag(i)}<span class="id">${esc(i.id)}</span><span class="title" title="${esc(i.title)}">${esc(i.title)}</span>${stageTag(i)}${healthTag(i)}
       <span class="grow"></span>
       ${i.parent_kind === 'link' ? `<span class="tag link">→ ${esc(i.parent)}</span>` : ''}
-      ${nWait(i) ? `<span class="tag wait" title="Вопросы ждут вашего ответа">Вопросы: ${nWait(i)}</span>` : ''}${nAct(i) ? `<span class="tag wait" title="Агент ждёт от вас действий">Действия: ${nAct(i)}</span>` : ''}
+      ${blockChip(i)}${nWait(i) ? `<span class="tag wait" title="Вопросы ждут вашего ответа">Вопросы: ${nWait(i)}</span>` : ''}${nAct(i) ? `<span class="tag wait" title="Агент ждёт от вас действий">Действия: ${nAct(i)}</span>` : ''}
       ${nReq(i) ? `<span class="tag req" title="Ваши просьбы, ещё не сделанные">Просьбы: ${nReq(i)}</span>` : ''}
       ${(i.waits || []).length ? `<span class="tag blocked" title="Заблокирована незавершёнными задачами">⏳ Ждёт ${esc(i.waits.join(', '))}</span>` : ''}
       ${claimTag(i)} ${holdTags(i)}
@@ -581,7 +621,15 @@ function docsHtml(docs) {
 async function renderMd(path, box) {
   const r = await fetch(fileUrl(path), { cache: 'no-store' });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'HTTP ' + r.status);
-  box.innerHTML = `<div class="md">${DOMPurify.sanitize(marked.parse(await r.text()))}</div>`;
+  // шапка YAML (front matter) — таблицей «ключ — значение», как «Сведения», а не жирным абзацем-заголовком (В7)
+  let txt = await r.text(), fm = '';
+  const m = txt.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+  if (m) {
+    txt = txt.slice(m[0].length);
+    fm = '<dl class="kv fm">' + m[1].split(/\r?\n/).filter((l) => l.trim()).map((l) => { const c = l.indexOf(':');
+      return c > 0 ? `<dt>${esc(l.slice(0, c).trim())}</dt><dd>${esc(l.slice(c + 1).trim())}</dd>` : `<dt></dt><dd>${esc(l.trim())}</dd>`; }).join('') + '</dl>';
+  }
+  box.innerHTML = `<div class="md">${fm}${DOMPurify.sanitize(marked.parse(txt))}</div>`;
   mdLinks(box, path);
 }
 // относительные ссылки и картинки — от каталога файла; ссылка на другой .md открывается здесь же
@@ -709,7 +757,9 @@ function qGrouped(i, pred) {
       <span class="sess">вопросов: ${ks.length}${nw ? ` · ждут ответа: ${nw}` : ''}</span><span class="grow"></span>${doc ? `<button class="btn" data-act="qgopen" data-ref="${esc(ref + '|g:' + g)}" title="${esc(doc)}">Открыть разбор</button>` : ''}</div>
       ${open ? `<ul class="plan">${ks.map((k) => planRow(i, plan[k], k, false, true, false, true)).join('')}</ul>` : ''}</div>`;
   }).join('');
-  return gs + (loose.length ? `<ul class="plan">${loose.map((k) => planRow(i, plan[k], k, false, true)).join('')}</ul>` : '');
+  // блокирующие — первыми, и перед группами (245)
+  const ul = (ks) => (ks.length ? `<ul class="plan">${ks.map((k) => planRow(i, plan[k], k, false, true)).join('')}</ul>` : '');
+  return ul(loose.filter((k) => isBlocking(plan[k]))) + gs + ul(loose.filter((k) => !isBlocking(plan[k])));
 }
 
 let qInDoc = false;   // вопрос рисуется внутри своего разбора — ссылка «к разделу разбора» не нужна
@@ -737,6 +787,9 @@ function renderQGroup(ref, g) {
       const box = document.createElement('div');
       box.innerHTML = DOMPurify.sanitize(marked.parse(text.replace(/^[ \t]*\[\[q:(\d+)\]\][ \t]*$/gm, '\n<div data-qslot="$1"></div>\n')));
       mdLinks(box, doc);
+      // заголовок разбора уже в шапке («Разбор: группа») — тот же H1 из документа второй раз не выводить (С18)
+      const h1 = box.querySelector('h1'), norm = (s) => s.trim().toLowerCase().replace(/^разбор:\s*/, '');
+      if (h1 && norm(h1.textContent) === norm(g)) h1.remove();
       box.querySelectorAll('[data-qslot]').forEach((el) => {
         const k = +el.dataset.qslot - 1;
         if (plan[k] && plan[k].q) { used.add(k); el.outerHTML = qbox(k); } else el.outerHTML = `<p class="sess">[вопроса ${k + 1} в задаче нет]</p>`;
@@ -747,7 +800,7 @@ function renderQGroup(ref, g) {
   const rest = ks.filter((k) => !used.has(k));
   return [{ key: 'qg:' + ref, cls: 'row card qgdoc' + (nDraftOf(i, 'q') ? ' dirty' : ''),
     html: `<div class="dhead"><span class="id">${esc(i.id)}</span><span class="title grow">Разбор: ${esc(g)}</span>${draftTag(i, 'q')}${cardBtn(i)}</div>
-      <div class="md">${body}</div>${rest.length ? `<h4>${doc ? 'Ещё вопросы группы' : 'Вопросы группы'}</h4>${rest.map(qbox).join('')}` : ''}${submitHtml(i, 'q')}` }];
+      <div class="md">${body}</div>${rest.length ? `<h4>${doc ? 'Ещё вопросы группы' : 'Вопросы группы'}</h4>${rest.map(qbox).join('')}` : ''}${submitHtml(i, 'q')}${agentHint(i)}` }];
 }
 
 function renderCard(ref) {
@@ -857,7 +910,7 @@ async function kwSave(t) {
 function renderSessions() {
   const off = new Set(src('keepwarm').off || []);
   const kw = 'keepwarm' in state.sources && !src('keepwarm').error;
-  if (!(src('sessions').list || []).length) return [{ key: 's-none', cls: 'empty', html: 'Сессий нет' }];
+  if (!(src('sessions').list || []).length) return [{ key: 's-none', cls: 'empty', html: 'Сессий нет. Сессии Claude Code на этой машине появятся здесь сами, когда начнут работу.' }];
   // настройки keepwarm — своим разделом с подписью и другим фоном: иначе сливаются с плашками сессий
   const head = (key, text) => ({ key, cls: 'tabsec static', html: `<h2>${text}</h2>` });
   const n = (src('sessions').list || []).length;
@@ -881,6 +934,12 @@ function renderSessions() {
   }, ...(kw && s.alive && kwOpen.has(s.sid) ? [{ key: 'kws:' + s.sid, cls: 'row kwrow', html: kwSessionForm(s) }] : [])]).flat()];   // форма — своей строкой: смена статуса сессии не стирает ввод
 }
 
+// сколько ещё держать: «ещё 1 ч 50 мин» — не пересчитывать «с 00:26, до 02:26» в уме (С12)
+function left(until) {
+  const m = Math.round((until - Date.now()) / 60000);
+  if (m <= 0) return 'срок вышел';
+  return 'ещё ' + (m < 60 ? `${m} мин` : `${Math.floor(m / 60)} ч${m % 60 ? ` ${m % 60} мин` : ''}`);
+}
 // «Занято»: захваты ресурсов списком от ресурса — свободна ли ИБ, кто держит, кто ждёт; повисший снимается
 function renderBusy() {
   const hs = holds().sort((a, b) => a.res.localeCompare(b.res, 'ru'));
@@ -888,9 +947,9 @@ function renderBusy() {
   return [{
     key: 'busy', cls: 'row busy', html: `<table class="busy"><tr><th>Ресурс</th><th>Кто держит</th><th>Зачем</th><th>Сколько</th><th>Очередь</th><th></th></tr>
       ${hs.map((h) => `<tr><td><b>${esc(h.res)}</b></td><td>${esc(sessName(h.sid))}${h.task ? ` · <span class="id">${esc(h.task)}</span>` : ''}</td>
-        <td>${esc(h.why || '—')}</td><td>с ${hhmm(h.since)}${h.until ? ', до ' + hhmm(h.until) : ''}</td>
+        <td>${esc(h.why || '—')}</td><td title="с ${hhmm(h.since)}">${h.until ? `${esc(left(h.until))} (до ${hhmm(h.until)})` : `с ${hhmm(h.since)}, без срока`}</td>
         <td>${(h.queue || []).map((q) => esc(sessName(q.sid))).join(', ') || '—'}</td>
-        <td><button class="btn sm" data-act="free" data-res="${esc(h.res)}" title="Снять захват: держатель узнает при следующем hold или held">Снять</button></td></tr>`).join('')}</table>`,
+        <td class="act"><button class="btn sm" data-act="free" data-res="${esc(h.res)}" title="Снять захват: держатель узнает при следующем hold или held">Снять</button></td></tr>`).join('')}</table>`,
   }];
 }
 
@@ -991,7 +1050,7 @@ function renderBoard() {
   });
   for (const x of boards) {
     rows.push({ key: 'bh:' + x.name, cls: 'tabsec', html: `<h2>${esc(label(x))} <span class="cnt">${x.notes.length}</span></h2>` });
-    if (!x.notes.length) rows.push({ key: 'bn0:' + x.name, cls: 'empty', html: 'Действующих объявлений нет' });
+    if (!x.notes.length) rows.push({ key: 'bn0:' + x.name, cls: 'empty', html: 'Действующих объявлений нет. Объявление — сообщение всем сессиям: напишите его в поле выше.' });
     for (const n of x.notes) rows.push(noteRow(x, n, false));
     const hk = 'bhist:' + x.name;
     if ((x.history || []).length) rows.push({ key: 'bhm:' + x.name, cls: 'morep', html: moreRow(hk, x.history.length, 'история (все строки, новые сверху)') });
@@ -1019,18 +1078,38 @@ function renderInbox() {
   // ожидаемые действия — первыми: агент стоит, пока их не сделать
   const acting = items().filter((i) => isActing(i) && inSub(i));
   // разделы «Ожидаемые действия» и «Вопросы» сворачиваются целиком, как блоки задач внутри них
-  const sec = (key, title, n) => ({ key: key + '-h', cls: 'tabsec',
-    html: `<h2 data-act="fold" data-id="${key}" tabindex="0" role="button" aria-expanded="${!fold.has(key)}">${chev(!fold.has(key))}${title} <span class="cnt">${n}</span></h2>` });
+  // порядок (242): то, что ждёт ответа, — «Действия», «Вопросы»; ниже справочное — «Ответы на ваши вопросы», «Ваши просьбы»:
+  // приглушённый заголовок, число — подписью, не бейджем. Просьбы по умолчанию свёрнуты (show), остальное — раскрыто (fold)
+  const sec = (key, title, n, ref = false) => {
+    const open = ref === 'show' ? shown.has(key) : !fold.has(key);
+    return { key: key + '-h', cls: 'tabsec' + (ref ? ' ref' : ''),
+      html: `<h2 data-act="${ref === 'show' ? 'show' : 'fold'}" data-${ref === 'show' ? 'key' : 'id'}="${key}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}${title} ${ref ? `<span class="sess">· ${n}</span>` : `<span class="cnt">${n}</span>`}</h2>` };
+  };
   if (acting.length) rows.push(sec('ib:acts', 'Ожидаемые действия', acting.reduce((s, i) => s + nAct(i), 0)));
   for (const i of fold.has('ib:acts') ? [] : acting) {   // как блок вопросов: варианты «Сделал» / «Не буду», свой ответ, «проще», отправка
     const fk = 'ina:' + i.tab + '|' + i.id, open = !fold.has(fk);
     const acts = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && p.act ? planRow(i, p, k, false, true, true) : '')).join('') : '';
     rows.push({ key: 'act:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded') + (nDraftOf(i, 'act') ? ' dirty' : ''),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
-        ${draftTag(i, 'act')}${cardBtn(i)}</div>${open ? `<ul class="plan">${acts}</ul>${submitHtml(i, 'act')}` : ''}` });
+        ${draftTag(i, 'act')}${cardBtn(i)}</div>${open ? `<ul class="plan">${acts}</ul>${submitHtml(i, 'act', true)}${isAsked(i) ? '' : agentHint(i)}` : ''}` });
   }
+  rows.push(sec('ib:qs', 'Вопросы', asked.reduce((s, i) => s + nWait(i), 0)));
+  const qOpen = !fold.has('ib:qs');
+  asked.sort((a, b) => !!nBlock(b) - !!nBlock(a));   // задачи с блокирующим вопросом — первыми (245)
+  if (qOpen && !asked.length) rows.push({ key: 'in-none', cls: 'empty', html: 'Вопросов нет' });
+  for (const i of qOpen ? asked : []) {
+    const fk = 'in:' + i.tab + '|' + i.id, open = !fold.has(fk);
+    const asks = open ? qGrouped(i, (p) => p.status === 'wait' && !p.act) : '';
+    const n = nWait(i), done = (i.plan || []).filter((p) => p.status === 'wait' && !p.act).length - n;
+    rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded') + (nDraftOf(i, 'q') ? ' dirty' : ''),
+      html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
+        ${draftTag(i, 'q')}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
+        ${open ? `${n ? reviewBtn(i) : ''}${asks}${submitHtml(i, 'q', true)}${agentHint(i)}` : ''}` });
+  }
+  // одна основная кнопка на экран: общая липкая строка под блоками, где ждут ответа (240)
+  rows.push({ key: 'in-submit', cls: 'qsubmit qall' + (submitAllInner() ? ' stick' : ''), html: submitAllInner() });
   const answered = items().filter((i) => nQa(i) && inSub(i));
-  if (answered.length) rows.push(sec('ib:qa', 'Ответы на ваши вопросы', answered.reduce((s, i) => s + nQa(i), 0)));
+  if (answered.length) rows.push(sec('ib:qa', 'Ответы на ваши вопросы', answered.reduce((s, i) => s + nQa(i), 0), true));
   const sess = (sid) => { const s = (src('sessions').list || []).find((x) => x.sid === sid); return s ? (s.title || s.address) : ''; };
   const qaRow = (i, e, k) => `<li class="qa${e.read ? ' read' : ''}"><div class="qaq"><span class="lbl">Вы</span> ${esc(e.q)}</div>
     <div class="qaa"><span class="lbl">Ответ</span> ${md(e.a, true, i)}</div>
@@ -1043,23 +1122,9 @@ function renderInbox() {
       <ul class="plan">${(i.qa || []).map((e, k) => (e.read ? '' : qaRow(i, e, k))).join('')}</ul>
       ${arch ? `<p class="morep">${moreRow(hk, arch, 'прочитанные')}</p>${shown.has(hk) ? `<ul class="plan">${(i.qa || []).map((e, k) => (e.read ? qaRow(i, e, k) : '')).join('')}</ul>` : ''}` : ''}` });
   }
-  rows.push(sec('ib:qs', 'Вопросы', asked.reduce((s, i) => s + nWait(i), 0)));
-  const qOpen = !fold.has('ib:qs');
-  const drafted = asked.filter(nDraftOf);
-  if (qOpen && drafted.length > 1) rows.push({ key: 'in-all', cls: 'morep', html: `<button class="btn primary" data-act="submitall">Зафиксировать все (${drafted.reduce((s, i) => s + nDraftOf(i), 0)})</button> <span class="sess">Ответы ${drafted.length} задач одной кнопкой</span>` });
-  if (qOpen && !asked.length) rows.push({ key: 'in-none', cls: 'empty', html: 'Вопросов нет' });
-  for (const i of qOpen ? asked : []) {
-    const fk = 'in:' + i.tab + '|' + i.id, open = !fold.has(fk);
-    const asks = open ? qGrouped(i, (p) => p.status === 'wait' && !p.act) : '';
-    const n = nWait(i), done = (i.plan || []).filter((p) => p.status === 'wait' && !p.act).length - n;
-    rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded') + (nDraftOf(i, 'q') ? ' dirty' : ''),
-      html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
-        ${draftTag(i, 'q')}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
-        ${open ? `${n ? reviewBtn(i) : ''}${asks}${submitHtml(i, 'q')}` : ''}` });
-  }
-  // просьбы владельца ждут агента, не его — внизу свёрнутой строкой, чтобы видеть неразобранное
+  // просьбы владельца ждут агента, не его — последним справочным разделом, по умолчанию свёрнуты
   const n = withReq.reduce((s, i) => s + nReq(i), 0);
-  if (n) rows.push({ key: 'in-req', cls: 'morep', html: moreRow('inbox:req', n, 'ваши просьбы у агентов') });
+  if (n) rows.push(sec('inbox:req', 'Ваши просьбы', n, 'show'));
   if (n && shown.has('inbox:req')) for (const i of withReq) {   // блок задачи сворачивается, как у вопросов
     const fk = 'inr:' + i.tab + '|' + i.id, open = !fold.has(fk);
     const reqs = open ? (i.plan || []).map((p, k) => (openReq(p) ? planRow(i, p, k, false) : '')).join('') : '';
@@ -1085,7 +1150,7 @@ function kcard(i) {
     <div class="kt">${esc(i.title)}</div>
     ${cur ? `<div class="ks" title="${esc(cur.name)}: сделано ${cur.done} из ${cur.total}">● ${esc(cur.name)} <span class="sess">· этап ${cur.n} из ${cur.of}</span></div>` : i.stage ? `<div class="ks">${md(i.stage, true, i)}</div>` : ''}
     ${i.next ? `<div class="kn">${md(i.next, true, i)}</div>` : ''}
-    <div class="kf">${nWait(i) ? `<span class="tag wait">Вопросы: ${nWait(i)}</span>` : ''}${nAct(i) ? `<span class="tag wait">Действия: ${nAct(i)}</span>` : ''}${remainTag(i)}
+    <div class="kf">${blockChip(i)}${nWait(i) ? `<span class="tag wait">Вопросы: ${nWait(i)}</span>` : ''}${nAct(i) ? `<span class="tag wait">Действия: ${nAct(i)}</span>` : ''}${remainTag(i)}
       ${i.percent != null ? `<span class="bar" title="${i.percent}%"><i style="width:${i.percent}%"></i></span>` : ''}</div></div>`;
 }
 function renderKanban() {
@@ -1138,6 +1203,10 @@ function renderLimits() {
   patch($('#limits'), rows);
 }
 
+// высота липкой шапки карточки — шкала этапов липнет сразу под ней (243), паспорт — тоже
+function headHeights() {
+  document.querySelectorAll('.task.card').forEach((a) => { const h = a.querySelector('.t-head')?.offsetHeight; if (h) a.style.setProperty('--th', h + 'px'); });
+}
 let renderLater = false;
 // после фиксации — убрать фокус из поля ответа и перерисовать: выбор варианта ставит курсор в поле, кнопка фокус не
 // забирает, и render ждал ухода из поля — кнопка висела нажатой, будто фиксация не прошла (28.10, дважды)
@@ -1182,6 +1251,7 @@ function render() {
   patch($('#list'), [...errs, ...rows]);
   patch($('#side'), side || []);
   document.querySelectorAll('textarea.draft').forEach(fitHeight);   // перерисованное поле — снова по тексту, не в одну строку
+  headHeights();
   renderLimits();
   tickAgo();
 }
@@ -1581,7 +1651,7 @@ drag($('#vgrip'), (e) => {
   prefs.vw = Math.max(360, Math.round((innerWidth - e.clientX) / zoom()));
   document.documentElement.style.setProperty('--vw', prefs.vw + 'px');
 }, () => store.set('ui', prefs));
-addEventListener('resize', () => { if (applyPrefs()) render(); });
+addEventListener('resize', () => { if (applyPrefs()) render(); else headHeights(); });
 new ResizeObserver(() => document.documentElement.style.setProperty('--hh', $('header').offsetHeight + 'px')).observe($('header'));
 
 document.addEventListener('keydown', (e) => {
