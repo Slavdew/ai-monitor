@@ -26,6 +26,8 @@
   "plan_mode": "sequential",
   "_ui": "Вид страницы по умолчанию; владелец меняет в ⚙ (запоминает браузер). scale — масштаб (1 = 100 %), width — center|full, max_width — предел ширины при center, split — доля предпросмотра, theme — auto|light|dark, labels — подписи статусов плана",
   "ui": { "scale": 1, "width": "center", "max_width": 1400, "split": 0.38, "theme": "auto", "look": "default",
+          "_doc_choices": "true — вопросы с вариантами в разборе агент делает выбираемыми в самом файле (web/qkit.js), в панели — один вопрос «ответы в файле»; false — каждый вопрос отдельно в панели",
+          "doc_choices": true,
           "labels": { "todo": "К работе", "doing": "В работе", "done": "Сделано", "skip": "Пропуск", "wait": "Ждёт вас", "later": "Отложено",
                       "active": "В работе", "paused": "Пауза", "busy": "Работает", "idle": "Ждёт" } },
 

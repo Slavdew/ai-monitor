@@ -112,6 +112,22 @@ async function post(source, action, args) {
   else freshen();
   return j;
 }
+// ответы, выбранные в документе разбора (web/qkit.js), — черновиком в его вопрос «ответы в файле» (p.doc);
+// фиксирует владелец сам. Только из своего окна просмотра: документ — в песочнице, источник сверяется.
+addEventListener('message', async (e) => {
+  const frame = document.querySelector('#vbody iframe');
+  if (e.data?.type !== 'ai-monitor/answer' || !frame || e.source !== frame.contentWindow) return;
+  const reply = (text) => { toast(text, 5000); e.source.postMessage({ type: 'ai-monitor/answer-ok', text }, '*'); };
+  const i = items().find((x) => x.id === e.data.task);
+  const p = i && (i.plan || [])[e.data.item - 1];
+  if (!p || !p.q || !p.doc) return reply(`вопроса ${e.data.item} «ответы в файле» в задаче «${e.data.task}» нет — скопируйте ответы вручную`);
+  if (!awaiting(p)) return reply(`вопрос ${e.data.item} уже отвечен — «Дополнить ответ» в панели`);
+  drafts[i.dir + '|' + (e.data.item - 1)] = String(e.data.text || '');
+  await post('tabs', 'draft', { dir: i.dir, index: e.data.item - 1, text: String(e.data.text || '') });
+  render();
+  reply(`ответ на вопрос ${e.data.item} — черновиком в панели; проверьте и зафиксируйте`);
+});
+
 // после своего действия — забрать состояние самой, не дожидаясь сигнала SSE: его держит одна вкладка, фоновую
 // браузер притормаживает, и «Зафиксировать» висело ~15 с (владелец 28.10). Сервер пересобирает сразу после действия.
 let freshT = [];
@@ -230,7 +246,7 @@ function planRow(i, p, k, full, answer = full, inActs = false) {   // inActs —
     : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="Сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${p.doc ? '<span class="tag doc" title="Вопросы с вариантами — в файле: выберите там, «Перенести в панель» вставит сводку в ответ">Ответы в файле</span> ' : ''}${md(p.text, true, i)}${p.doc ? ` <a href="#" data-doc="${esc(p.doc)}" title="${esc(p.doc)}">открыть файл ›</a>` : ''}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length
   + (reviewOn(i) ? 1 : 0);

@@ -167,6 +167,7 @@ def parser():
         x.add_argument('--opt', action='append', default=[]); x.add_argument('--force', action='store_true')
         x.add_argument('--act', action='store_true'); x.add_argument('--run', default='')
         x.add_argument('--how', default=''); x.add_argument('--where', default='')
+        x.add_argument('--doc', default='')   # ask: вопросы с вариантами — в файле (qkit), ответ — одной строкой оттуда
     st = sp('set'); st.add_argument('ref'); st.add_argument('rest', nargs='+')
     bt = sp('batch'); bt.add_argument('ref')
     ak = sp('ack'); ak.add_argument('ref'); ak.add_argument('n', nargs='+')
@@ -176,6 +177,7 @@ def parser():
     ap = sp('api'); ap.add_argument('source', nargs='?'); ap.add_argument('action', nargs='?'); ap.add_argument('pairs', nargs='*')
     sa = sp('stats'); sa.add_argument('--days', type=float, default=7)
     sp('modules')
+    sp('conf').add_argument('key')   # значение настройки (умолчания + личный файл): conf ui.doc_choices
     nx = sp('next'); nx.add_argument('--tab'); nx.add_argument('--project'); nx.add_argument('--force', action='store_true')
     rl = sp('release'); rl.add_argument('ref', nargs='?')
     tk = sp('take'); tk.add_argument('ref'); tk.add_argument('--force', action='store_true')
@@ -265,6 +267,11 @@ def main():
         return stats(cfg, a.days)
     if a.cmd == 'modules':
         return list_modules(cfg)
+    if a.cmd == 'conf':   # агенту — правило включено ли у этого человека (ui.doc_choices и т. п.)
+        v = cfg
+        for k in a.key.split('.'):
+            v = v.get(k) if isinstance(v, dict) else None
+        return print(json.dumps(v, ensure_ascii=False))
     if a.cmd in ('hook', 'watch'):   # без журнала вызовов: хук срабатывает на каждый ввод
         return hook(cfg) if a.cmd == 'hook' else watch(cfg, a.task)
     sid = session_id()
@@ -521,7 +528,13 @@ def add(cfg, a):
         n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt or ['Сделал', 'Не буду'], extra)
         return f'ok пункт {n}'
     if a.cmd == 'ask' or a.ask:
-        n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt)
+        doc = {}
+        if a.doc:   # «ответы в файле»: владелец выбирает в документе, в панель приходит их сводка одним ответом
+            p = a.doc if os.path.isabs(a.doc) else os.path.join(d, a.doc)
+            if not os.path.isfile(p):
+                raise ValueError(f'--doc: файла нет: {p}')
+            doc = {'doc': os.path.normpath(p)}
+        n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt, doc or None)
         rest = {k: v for k, v in fields.items() if k in ('section', 'after', 'who')}
         if rest:
             set_item(cfg, d, n, rest)
