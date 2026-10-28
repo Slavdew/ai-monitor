@@ -222,7 +222,7 @@ async function saveDraft(el) {
 
 // пункт плана; full — карточка: статус меняется меню (в предпросмотре легко задеть случайно);
 // answer — поле ответа у вопроса (карточка и «Ждут вас»)
-function planRow(i, p, k, full, answer = full) {
+function planRow(i, p, k, full, answer = full, inActs = false) {   // inActs — в блоке «Ожидаемые действия»: метка «Действие» там лишняя
   const mark = p.state === 'waiting' ? `<span class="dep wait" title="Ждёт пунктов">⏳ После ${p.waits.join(', ')}</span>`
     : p.parallel && full && !p.req && p.state === 'ready' ? '<span class="dep"><span class="tag par" title="Можно вести одновременно с другими готовыми">Парал.</span></span>' : '<span class="dep"></span>';
   const st = p.status === 'wait' ? (awaiting(p) ? `<span class="tag st wait" title="Вопрос: ждёт вашего ответа">${esc(label('wait'))}</span>`
@@ -230,9 +230,10 @@ function planRow(i, p, k, full, answer = full) {
     : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="Сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
-const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length;
+const nDraftOf = (i) => (i.plan || []).filter((p, k) => (drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k)).length
+  + (reviewOn(i) ? 1 : 0);
 // ответ доходит до агента только с репликой в его сессии (хук на вводе) — подсказка, куда написать (аудит 27.10, ★)
 const PING_PHRASE = 'Ответил в панели — посмотри';
 function sessionOf(i) {
@@ -254,8 +255,10 @@ function agentHint(i) {
 const submitInner = (i) => (nDraftOf(i) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}">Зафиксировать ответы (${nDraftOf(i)})</button>
       <span class="sess">Черновики видны только вам, пока не зафиксированы</span></p>` : '') + agentHint(i);
 // контейнер есть всегда: пока фокус в поле ответа, render отложен — кнопку обновляет refreshSubmit на месте
-// «Проверить актуальность вопросов» — в карточке и в «Ждут вас»: просьба review, её возьмёт сессия задачи
-const reviewBtn = (i) => `<p class="sess"><button class="btn" data-act="qreview" data-dir="${esc(i.dir)}" title="Агент задачи пройдёт по открытым вопросам: на что ответ уже есть и что потеряло смысл — закроет с причиной, остальное отметит проверенным">Проверить актуальность вопросов</button></p>`;
+// «Проверить актуальность вопросов» — под шапкой вопросов в карточке и в «Ждут вас». Черновик, как ответ: уходит
+// с «Зафиксировать ответы», до того снимается повторным щелчком (случайный щелчок не будит агента)
+const reviewOn = (i) => drafts[i.dir + '|review'] ?? i.review_draft ?? false;
+const reviewBtn = (i) => `<p class="sess qrev"><button class="btn${reviewOn(i) ? ' on' : ''}" data-act="qreview" data-dir="${esc(i.dir)}" aria-pressed="${reviewOn(i)}" title="Агент задачи пройдёт по открытым вопросам: на что ответ уже есть и что потеряло смысл — закроет с причиной, остальное отметит проверенным. Уйдёт с «Зафиксировать ответы»; повторный щелчок — отменить">${reviewOn(i) ? '✓ Проверка актуальности — уйдёт с «Зафиксировать»' : 'Проверить актуальность вопросов'}</button></p>`;
 const submitHtml = (i) => `<div class="qsubmit" data-dir="${esc(i.dir)}">${submitInner(i)}</div>`;
 function refreshSubmit(dir) {
   const i = items().find((x) => x.dir === dir);
@@ -405,9 +408,8 @@ function taskView(i, mode) {
   const nAnswered = plan.filter((p) => p.status === 'wait' && !awaiting(p)).length;
   const ansKey = 'ans:' + ref;
   const answered = shown.has(ansKey) ? plan.map((p, k) => (p.status === 'wait' && !awaiting(p) ? row(p, k) : '')).join('') : '';
-  const qPanel = `${waitQ ? `<ul class="plan">${waitQ}</ul>` : '<p class="sess">Вопросов, ждущих ответа, нет</p>'}
+  const qPanel = `${card && waitQ ? reviewBtn(i) : ''}${waitQ ? `<ul class="plan">${waitQ}</ul>` : '<p class="sess">Вопросов, ждущих ответа, нет</p>'}
     ${card ? submitHtml(i) : ''}
-    ${card && waitQ ? reviewBtn(i) : ''}
     ${nAnswered ? `<p class="morep">${moreRow(ansKey, nAnswered, 'отвечено, ждёт агента')}</p>${answered ? `<ul class="plan">${answered}</ul>` : ''}` : ''}`;
 
   const doneKey = 'plan:' + ref, laterKey = 'later:' + ref;
@@ -916,7 +918,7 @@ function renderInbox() {
   if (acting.length) rows.push(sec('ib:acts', 'Ожидаемые действия', acting.reduce((s, i) => s + nAct(i), 0)));
   for (const i of fold.has('ib:acts') ? [] : acting) {   // как блок вопросов: варианты «Сделал» / «Не буду», свой ответ, «проще», отправка
     const fk = 'ina:' + i.tab + '|' + i.id, open = !fold.has(fk);
-    const acts = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && p.act ? planRow(i, p, k, false, true) : '')).join('') : '';
+    const acts = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && p.act ? planRow(i, p, k, false, true, true) : '')).join('') : '';
     rows.push({ key: 'act:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
         ${nAct(i) ? `<span class="tag wait">Действия: ${nAct(i)}</span>` : ''}${cardBtn(i)}</div>${open ? `<ul class="plan">${acts}</ul>${submitHtml(i)}` : ''}` });
@@ -947,7 +949,7 @@ function renderInbox() {
     rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
         ${n ? `<span class="tag wait">Вопросы: ${n}</span>` : ''}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
-        ${open ? `<ul class="plan">${asks}</ul>${submitHtml(i)}${n ? reviewBtn(i) : ''}` : ''}` });
+        ${open ? `${n ? reviewBtn(i) : ''}<ul class="plan">${asks}</ul>${submitHtml(i)}` : ''}` });
   }
   // просьбы владельца ждут агента, не его — внизу свёрнутой строкой, чтобы видеть неразобранное
   const n = withReq.reduce((s, i) => s + nReq(i), 0);
@@ -1098,8 +1100,11 @@ document.addEventListener('click', async (e) => {
     for (const k of Object.keys(drafts)) if (k.startsWith(t.dataset.dir + '|')) delete drafts[k];
     if (r.ok) toast(`Зафиксировано: ${r.sent}`);
   } else if (a === 'qreview') {
-    const r = await post('tabs', 'review', { dir: t.dataset.dir });
-    if (r.ok) toast(`Проверка записана пунктом ${r.n} — агент задачи увидит её при вашем следующем вводе`, 3000);
+    const i = items().find((x) => x.dir === t.dataset.dir), on = !(i && reviewOn(i));
+    drafts[t.dataset.dir + '|review'] = on;
+    document.querySelectorAll(`[data-act="qreview"][data-dir="${CSS.escape(t.dataset.dir)}"]`).forEach((b) => { if (i) b.outerHTML = reviewBtn(i).replace(/^<p[^>]*>|<\/p>$/g, ''); });
+    refreshSubmit(t.dataset.dir);
+    await post('tabs', 'draft', { dir: t.dataset.dir, review: on });
   } else if (a === 'qopt') {
     // вариант ответа: повторный щелчок снимает; старую галочку «проще» заменяет вариант
     const v = t.getAttribute('aria-checked') === 'true' ? '' : t.dataset.v;

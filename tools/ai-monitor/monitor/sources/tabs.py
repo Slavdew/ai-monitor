@@ -131,6 +131,7 @@ def read_item(dir_, tab, cfg):
         'percent': round(100 * done / sum(weights)) if weights else None,
         'links': task.get('links', {}),
         'qa': task.get('qa', []),   # ответы агента на вопросы владельца: {q, a, at, by, item, read}
+        'review_draft': bool(task.get('review_draft')),   # «Проверить актуальность вопросов» — уйдёт с «Зафиксировать»
         'docs': _docs(dir_, task, it),
         'status': hmeta.get('status') or task.get('status') or '',
         'next': hmeta.get('next') or task.get('next', ''),

@@ -67,8 +67,14 @@ def ask(cfg, dir_, text, note='', force=False, opts=(), extra=None):
 
 def draft(cfg, args):
     """Черновик ответа владельца: пустой текст — убрать. rephrase: строка (можно пустую) — «перефразировать проще»
-    с комментарием, None — снять просьбу."""
+    с комментарием, None — снять просьбу. review: true/false — черновик проверки актуальности вопросов задачи."""
     def fn(t):
+        if 'review' in args:   # на задачу, не на пункт: уйдёт просьбой review с «Зафиксировать ответы»
+            if args['review']:
+                t['review_draft'] = True
+            else:
+                t.pop('review_draft', None)
+            return
         p = tabs.item(t.get('plan', []), tabs._n(args))
         if 'text' in args:
             text = str(args.get('text') or '').strip()
@@ -91,10 +97,13 @@ def draft(cfg, args):
 
 
 def submit(cfg, args):
-    """Все черновики задачи разом: ответы дописываются, агентам — answers.json и строка в events.jsonl."""
-    sent = []
+    """Все черновики задачи разом: ответы дописываются, агентам — answers.json и строка в events.jsonl.
+    Черновик проверки актуальности (review_draft) уходит следом просьбой review."""
+    sent, review_ = [], []
 
     def fn(t):
+        if t.pop('review_draft', None):
+            review_.append(True)
         for k, p in enumerate(t.get('plan', [])):
             text, rephrase, opt = p.pop('draft', None), p.pop('rephrase_draft', None), p.pop('draft_opt', None)
             # вариант + текст: текст — дополнение к варианту; без варианта текст — свой ответ; «проще» — просьба переписать
@@ -125,13 +134,20 @@ def submit(cfg, args):
                                             **({'by': p['by']} if p.get('by') else {}), **({'act': True} if p.get('act') else {})}
             write_json(_pending_path(cfg), pending)
     task = tabs.update_task(cfg, args['dir'], fn)
+    extra = 0
+    if review_:
+        try:
+            review(cfg, {'dir': args['dir']})
+            extra = 1
+        except ValueError:   # проверка уже запрошена и не закрыта — вторая не нужна
+            pass
     if not sent:
-        return {'ok': True, 'sent': 0}
+        return {'ok': True, 'sent': extra}
     tid = task.get('id') or os.path.basename(args['dir'])
     with open(os.path.join(cfg['state_dir'], 'events.jsonl'), 'a', encoding='utf-8') as f:
         f.write(json.dumps({'kind': 'submit', 'task': tid, 'items': [k + 1 for k, _ in sent], 'at': now_ms()},
                            ensure_ascii=False) + '\n')
-    return {'ok': True, 'sent': len(sent)}
+    return {'ok': True, 'sent': len(sent) + extra}
 
 
 REVIEW_TEXT = 'Проверить актуальность открытых вопросов'

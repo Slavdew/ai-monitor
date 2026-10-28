@@ -110,4 +110,5 @@ def collect(cfg, src, ctx):
         write_json(saved_path, {**saved, **fresh})   # название переживает закрытие сессии
     out.sort(key=lambda s: (not s['alive'], -s['started']))   # стабильный порядок: по старту, не по активности
     from monitor.core import _agents
-    return {'list': out, **({'error': _agents['error']} if _agents['error'] else {})}
+    return {'list': out, **({'error': _agents['error']} if _agents['error'] else {}),
+            **({'diag': _agents.get('diag', '')} if not out else {})}

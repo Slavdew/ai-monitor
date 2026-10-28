@@ -34,7 +34,9 @@ def _registry(cfg):
 def _alive(cfg, c, reg):
     if c.get('sid') in reg:
         return reg[c['sid']]
-    if c.get('reg'):   # сессия была в реестре и пропала из него — закрыта (реестр хранит только живые)
+    # сессия была в реестре и пропала из него — закрыта (реестр хранит только живые). Пустой реестр — не довод:
+    # `claude agents` у сервера вернул пусто, а живая сессия теряла захват (28.10) — тогда решает срок
+    if c.get('reg') and reg:
         return False
     ttl = module_settings(cfg, 'claims').get('ttl_sec', 1800)
     return c.get('at', 0) > boot_ms() and now_ms() - c.get('at', 0) < ttl * 1000

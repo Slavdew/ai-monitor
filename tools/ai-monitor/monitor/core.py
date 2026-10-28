@@ -416,7 +416,10 @@ def claude_sessions(max_age=3.0):
         p = subprocess.run([exe, 'agents', '--json'], capture_output=True, timeout=15,
                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         data = json.loads(p.stdout.decode('utf-8', 'replace') or '[]')
-        _agents.update(at=now, list=[a for a in data if isinstance(a, dict)], error='' if p.returncode == 0 else f'claude agents: код {p.returncode}')
+        _agents.update(at=now, list=[a for a in data if isinstance(a, dict)], error='' if p.returncode == 0 else f'claude agents: код {p.returncode}',
+                       # пустой список при живых сессиях (28.10 у сервера из трея) — видно, что ответила команда
+                       diag=f'{exe} · код {p.returncode} · вывод {len(p.stdout)} Б · stderr: '
+                            + p.stderr.decode('utf-8', 'replace').strip()[:300])
     except (OSError, ValueError, subprocess.TimeoutExpired) as e:
         _agents.update(at=now, list=[], error=f'claude agents --json: {type(e).__name__}')
     return _agents['list']
