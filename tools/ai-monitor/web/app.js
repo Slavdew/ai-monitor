@@ -64,16 +64,18 @@ const setPref = (k, v) => { if (v === null) delete prefs[k]; else prefs[k] = v; 
 const isClosed = (i) => i.status === 'done' || i.percent === 100;
 // пиктограмма сворачивания: шеврон, повёрнут вниз у раскрытого
 const chev = (open) => `<svg class="chev${open ? ' open' : ''}" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg>`;
-const moreRow = (key, n, what) => `<span class="more" tabindex="0" role="button" aria-expanded="${shown.has(key)}" data-act="show" data-key="${esc(key)}">${chev(shown.has(key))}${what}: ${n}</span>`;
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);   // регистр как в предложении
+const moreRow = (key, n, what) => `<span class="more" tabindex="0" role="button" aria-expanded="${shown.has(key)}" data-act="show" data-key="${esc(key)}">${chev(shown.has(key))}${cap(what)}: ${n}</span>`;
 
 // подвкладки — типы задач (вкладки конфига) второй строкой внутри вида; выбор помнит браузер по виду
 const sub = store.get('sub', {});
-function subtabs(tabs, count, warn) {
+// note — что «Все» не считает (подпись после счётчика, напр. «без идей»)
+function subtabs(tabs, count, warn, note) {
   if (tabs.length < 2) return null;
   const cur = tabs.some((t) => t.id === sub[view]) ? sub[view] : '';
   const total = tabs.reduce((s, t) => s + count(t), 0);
   const btn = (id, title, n) => `<button class="subtab${id === cur ? ' on' : ''}" data-act="sub" data-v="${esc(id)}" aria-pressed="${id === cur}">${esc(title)}${n ? ` <b>${n}</b>` : ''}</button>`;
-  return { cur, row: { key: 'sub:' + view, cls: 'subtabs' + (warn ? ' warn' : ''), html: btn('', 'Все', total) + tabs.map((t) => btn(t.id, t.title, count(t))).join('') } };
+  return { cur, row: { key: 'sub:' + view, cls: 'subtabs' + (warn ? ' warn' : ''), html: btn('', 'Все', total).replace('</button>', note ? ` <span class="sess">· ${note}</span></button>` : '</button>') + tabs.map((t) => btn(t.id, t.title, count(t))).join('') } };
 }
 
 // --- общий механизм ---
@@ -94,16 +96,29 @@ function patch(box, rows) {
   old.forEach((n) => n.remove());
 }
 
-function ago(ms) {
+// дата по-человечески: «сегодня, 05:30», «вчера, 05:30», «27 окт., 05:30» (другой год — с годом); time=false — без времени
+function humanDate(ms, time = true) {
+  const d = new Date(ms), now = new Date();
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dd = Math.round((day(now) - day(d)) / 86400000);
+  const date = dd === 0 ? 'сегодня' : dd === 1 ? 'вчера'
+    : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) });
+  return time ? `${date}, ${d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : date;
+}
+// строка времени из task.json (ISO, иногда только дата) — по-человечески; не разобралась — как есть
+const stampText = (s) => { const ms = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + 'T00:00' : s); return Number.isNaN(ms) ? String(s) : humanDate(ms, /T\d/.test(String(s))); };
+// rel — «11 мин назад» (для подписей вида «Активность …»)
+function ago(ms, rel = false) {
   const m = Math.round((Date.now() - ms) / 60000);
   if (m < 1) return 'сейчас';
-  if (m < 60) return `${m} мин`;
-  if (m < 1440) return `${Math.floor(m / 60)} ч ${m % 60} мин`;
-  return new Date(ms).toLocaleDateString('ru-RU');
+  const back = rel ? ' назад' : '';
+  if (m < 60) return `${m} мин${back}`;
+  if (m < 1440) return `${Math.floor(m / 60)} ч ${m % 60} мин${back}`;
+  return humanDate(ms);
 }
 const plural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
-const agoSpan = (ms) => (ms ? `<span class="ago" data-ts="${ms}"></span>` : '—');
-function tickAgo() { document.querySelectorAll('.ago').forEach((e) => { e.textContent = ago(+e.dataset.ts); }); }
+const agoSpan = (ms, rel = false) => (ms ? `<span class="ago" data-ts="${ms}"${rel ? ' data-rel="1"' : ''}></span>` : '—');
+function tickAgo() { document.querySelectorAll('.ago').forEach((e) => { e.textContent = ago(+e.dataset.ts, !!e.dataset.rel); }); }
 
 async function post(source, action, args) {
   const r = await fetch(`/api/${source}/${action}`, { method: 'POST', body: JSON.stringify(args) });
@@ -167,7 +182,7 @@ const cardBtn = (i) => `<button class="ibtn go" data-act="card" data-ref="${esc(
 
 const drafts = {};      // «каталог|индекс» -> текст, ещё не сохранённый сервером
 const draftTimers = {};
-const fmtTime = (ms) => new Date(ms).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const fmtTime = (ms) => humanDate(ms);
 
 // вопрос (вариант B): совет агента блоком, варианты ответа кнопками, поле — свой ответ или дополнение к варианту.
 // Варианты: «↺ проще» всегда первым, «★ Как советуешь» — если есть совет, затем opts агента. Без варианта
@@ -188,7 +203,7 @@ function qaHtml(i, p, k, edit) {
   const at = `data-key="${esc(key)}" data-dir="${esc(i.dir)}" data-index="${k}"`;
   const draft = drafts[key] ?? p.draft ?? '';
   const opt = optOf(p, key);
-  const optName = (v) => (v === '@reword' ? '↺ Проще' : v === '@advice' ? '★ Как советуешь' : v);
+  const optName = (v) => (v === '@reword' ? '↺ Переспросить проще' : v === '@advice' ? '★ Как советуешь' : v);
   if (!edit) {   // только смотреть: черновик серым, ответ — в карточке
     return `<div class="qa">${advice}${was}${answers}${asked}${status}
       ${draft || opt ? `<div class="sess">Черновик: ${opt ? `«${esc(optName(opt))}»` : ''}${opt && draft ? ' + ' : ''}${draft ? `«${esc(draft)}»` : ''}</div>` : ''}
@@ -236,13 +251,14 @@ async function saveDraft(el) {
 // inActs — в блоке «Ожидаемые действия»: метка «Действие» там лишняя; inGroup — внутри своей группы: метка группы лишняя
 function planRow(i, p, k, full, answer = full, inActs = false, inGroup = false) {
   const mark = p.state === 'waiting' ? `<span class="dep wait" title="Ждёт пунктов">⏳ После ${p.waits.join(', ')}</span>`
-    : p.parallel && full && !p.req && p.state === 'ready' ? '<span class="dep"><span class="tag par" title="Можно вести одновременно с другими готовыми">Парал.</span></span>' : '<span class="dep"></span>';
-  const st = p.status === 'wait' ? (awaiting(p) ? `<span class="tag st wait" title="Вопрос: ждёт вашего ответа">${esc(label('wait'))}</span>`
+    : p.parallel && full && !p.req && p.state === 'ready' ? '<span class="dep"><span class="tag par" title="Можно вести одновременно с другими готовыми">Можно параллельно</span></span>' : '<span class="dep"></span>';
+  // в «Ждут вас» (без меню статусов, с полем ответа) всё и так ждёт вас — метка «Ждёт вас» там лишняя
+  const st = p.status === 'wait' ? (awaiting(p) ? (!full && answer ? '' : `<span class="tag st wait" title="Вопрос: ждёт вашего ответа">${esc(label('wait'))}</span>`)
       : '<span class="tag st ok" title="Ответ отправлен, ждёт агента">Отвечено</span>')
     : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="Сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${p.group && !inGroup ? `<button class="tag doc" data-act="qgopen" data-ref="${esc(i.tab + '|' + i.id + '|g:' + p.group)}" title="Вопрос из группы — открыть разбор">${esc(p.group)}</button> ` : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req && !openReq(p) ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${p.group && !inGroup ? `<button class="tag doc" data-act="qgopen" data-ref="${esc(i.tab + '|' + i.id + '|g:' + p.group)}" title="Вопрос из группы — открыть разбор">${esc(p.group)}</button> ` : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Переспросить проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i, kind = '') => (i.plan || []).filter((p, k) => (!kind || (kind === 'act') === !!p.act)
   && ((drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k))).length
@@ -268,7 +284,7 @@ function agentHint(i) {
 // kind — блок «Ждут вас»: act — только действия, q — только вопросы (и проверка актуальности); пусто — всё (карточка)
 const submitInner = (i, kind = '') => (nDraftOf(i, kind) ? `<p><button class="btn primary" data-act="submit" data-dir="${esc(i.dir)}" data-kind="${kind}">Зафиксировать ответы (${nDraftOf(i, kind)})</button>
       <span class="sess">Черновики видны только вам, пока не зафиксированы</span></p>` : '') + agentHint(i);
-const draftTag = (i, kind) => `<span class="tag draftn"${nDraftOf(i, kind) ? '' : ' hidden'}>не отправлено: ${nDraftOf(i, kind)}</span>`;
+const draftTag = (i, kind) => `<span class="tag draftn"${nDraftOf(i, kind) ? '' : ' hidden'}>Не отправлено: ${nDraftOf(i, kind)}</span>`;
 // контейнер есть всегда: пока фокус в поле ответа, render отложен — кнопку обновляет refreshSubmit на месте
 // «Проверить актуальность вопросов» — под шапкой вопросов в карточке и в «Ждут вас». Черновик, как ответ: уходит
 // с «Зафиксировать ответы», до того снимается повторным щелчком (случайный щелчок не будит агента)
@@ -286,7 +302,7 @@ function refreshSubmit(dir) {
     const row = el.closest('.row');
     row?.classList.toggle('dirty', !!n);
     const tag = row?.querySelector('.draftn');
-    if (tag) { tag.hidden = !n; tag.textContent = `не отправлено: ${n}`; }
+    if (tag) { tag.hidden = !n; tag.textContent = `Не отправлено: ${n}`; }
   });
 }
 const copyBtn = (text, what) => `<button class="btn" data-copy="${esc(text)}" title="${esc(text)}">⧉ ${what}</button>`;
@@ -387,10 +403,9 @@ function stageBar(i, ref) {
   const work = (i.plan || []).filter((p) => !p.q && !p.req);
   const tip = (x) => `${x.name}: сделано ${x.done} из ${x.total}\n` + work.filter((p) => p.section === x.name)
     .map((p) => `${p.state === 'done' || p.state === 'skip' ? '✓' : p.status === 'doing' ? '●' : '·'} ${plain(p.text)}`).slice(0, 12).join('\n')
-    + (x.total > 12 ? `\n… ещё ${x.total - 12}` : '');
-  const cur = ss.find((x) => x.st === 'cur');
-  return `<div class="sb-cap">Этапы — разделы плана; щелчок по этапу — его пункты${cur ? ` · <b>сейчас: этап ${cur.n} из ${cur.of} «${esc(cur.name)}»</b>, сделано ${cur.done} из ${cur.total}` : ''}</div>
-  <ol class="stagebar" aria-label="Этапы">${ss.map((x) => `<li class="${x.st}${sfil[ref] === x.name ? ' on' : ''}" title="${esc(tip(x))}" data-act="stage" data-ref="${esc(ref)}" data-v="${esc(x.name)}" tabindex="0" role="button" aria-pressed="${sfil[ref] === x.name}">
+    + (x.total > 12 ? `\n… ещё ${x.total - 12}` : '') + '\nЩелчок — все пункты этапа';
+  // текущий этап и так выделен на шкале; как ей пользоваться — в подсказке, а не постоянной строкой
+  return `<ol class="stagebar" aria-label="Этапы — разделы плана; щелчок по этапу показывает его пункты">${ss.map((x) => `<li class="${x.st}${sfil[ref] === x.name ? ' on' : ''}" title="${esc(tip(x))}" data-act="stage" data-ref="${esc(ref)}" data-v="${esc(x.name)}" tabindex="0" role="button" aria-pressed="${sfil[ref] === x.name}">
     <i style="width:${Math.round(100 * x.done / x.total)}%"></i><span class="nm">${x.st === 'done' ? '✓ ' : x.st === 'cur' ? '● ' : ''}${esc(x.name)}</span>
     <b>${x.done}/${x.total}</b>${x.st === 'cur' ? `<span class="sn">Этап ${x.n}/${x.of}</span>` : ''}</li>`).join('')}</ol>`;
 }
@@ -419,7 +434,7 @@ function taskView(i, mode) {
 
   // паспорт: суть, где остановились, ход, сведения — всегда на виду
   const facts = [i.changed && `изм. <span class="ago" data-ts="${i.changed}"></span>`,
-    i.updated && `handoff ${esc(String(i.updated).slice(0, 10))}${i.stale ? ' <span class="tag stale" title="Файлы новее handoff">Устарел</span>' : ''}`,
+    i.updated && `<span title="Передача (handoff): ${esc(i.updated)}">передача ${esc(stampText(i.updated))}</span>${i.stale ? ' <span class="tag stale" title="Файлы задачи новее её передачи (handoff): описание могло отстать">Передача устарела</span>' : ''}`,
     i.project && esc(i.project), s.n && `<b class="live">●${s.n}</b> ${names.join(', ')}`, claimTag(i, card), holdTags(i),
     (i.waits || []).length && `<span class="tag blocked">⏳ Ждёт ${esc(i.waits.join(', '))}</span>`].filter(Boolean).join(' · ');
   const summary = `<section class="t-sum"><div class="t-sumbody">${i.goal ? `<div class="goal mdx">${md(i.goal, false, i)}</div>` : ''}${i.desc ? `<div class="desc mdx">${md(i.desc, false, i)}</div>` : ''}
@@ -437,12 +452,15 @@ function taskView(i, mode) {
     ${nAnswered ? `<p class="morep">${moreRow(ansKey, nAnswered, 'отвечено, ждёт агента')}</p>${answered ? `<ul class="plan">${answered}</ul>` : ''}` : ''}`;
 
   const doneKey = 'plan:' + ref, laterKey = 'later:' + ref;
-  const work = plan.filter((p) => !p.q);
-  const nDone = plan.filter((p) => p.state === 'done' || p.state === 'skip').length;
-  const nLater = plan.filter((p) => p.state === 'later').length;
+  // одна формула для вкладки, фильтров и «сделано»: пункты плана без вопросов, ждущих ответа, и открытых просьб
+  const inPlan = (p) => p.status !== 'wait' && !openReq(p);
+  const work = plan.filter(inPlan);
+  const nDone = work.filter((p) => p.state === 'done' || p.state === 'skip').length;
+  const nSkip = work.filter((p) => p.state === 'skip').length;
+  const nLater = work.filter((p) => p.state === 'later').length;
   const st = (p) => p.status || 'todo';
   const counts = {};
-  for (const p of plan) if (p.status !== 'wait' && !openReq(p)) counts[st(p)] = (counts[st(p)] || 0) + 1;
+  for (const p of work) counts[st(p)] = (counts[st(p)] || 0) + 1;
   const order = src('tabs').plan_statuses || Object.keys(counts);
   const chips = Object.keys(counts).length > 1 ? `<p class="chips">${order.filter((x) => counts[x]).map((x) =>
     `<button class="chip${pfilter.has(x) ? ' on' : ''}" data-act="pf" data-k="${esc(x)}" aria-pressed="${pfilter.has(x)}">${esc(label(x))} <b>${counts[x]}</b></button>`).join('')}</p>` : '';
@@ -466,7 +484,7 @@ function taskView(i, mode) {
     <ul class="plan">${planList}</ul>`
     : `${reqs ? `<h4 class="asks">Ваши просьбы · ${nReq(i)}</h4><ul class="plan">${reqs}</ul><h4 class="asks">План</h4>` : ''}
     ${chips}
-    ${!filtered && (nDone || nLater) ? `<p class="morep">${nDone ? moreRow(doneKey, nDone, 'сделано') : ''}${nDone && nLater ? ' · ' : ''}${nLater ? moreRow(laterKey, nLater, 'отложено') : ''}</p>` : ''}
+    ${!filtered && (nDone || nLater) ? `<p class="morep">${nDone ? moreRow(doneKey, nDone, nSkip ? 'сделано и пропущено' : 'сделано') : ''}${nDone && nLater ? ' · ' : ''}${nLater ? moreRow(laterKey, nLater, 'отложено') : ''}</p>` : ''}
     ${planList ? `<ul class="plan">${planList}</ul>` : '<p class="sess">План пуст</p>'}`;
 
   // файлы: приложенные (на чём задача основана) и артефакты (промежуточные результаты)
@@ -484,25 +502,28 @@ function taskView(i, mode) {
     + fGroup('artifact', 'Артефакты', 'промежуточные результаты: разборы, макеты, handoff') : '<p class="sess">Файлов нет</p>';
 
   const links = Object.entries(i.links || {}).filter(([k, v]) => k !== 'docs' && k !== 'artifacts' && v && v.length).map(([k, v]) => `${k}: ${esc([].concat(v).join(', '))}`).join('; ');
-  const sessRows = (src('sessions').list || []).filter((x) => x.alive && x.task === i.id)
-    .map((x) => `<li><b>${esc(x.title || x.sid.slice(0, 8))}</b> <span class="tag ${x.status === 'busy' ? 'active' : ''}">${esc(label(x.status))}</span> ${agoSpan(x.last)}</li>`).join('');
+  // сессии задачи — одной строкой «Сессия»: живые с состоянием, id — копированием; записанная в задаче, но не живая — коротким id
+  const live = (src('sessions').list || []).filter((x) => x.alive && x.task === i.id);
+  const sidCode = (sid) => `<code class="copy" data-copy="${esc(sid)}" tabindex="0" title="${esc(sid)} — скопировать id сессии">${esc(sid.slice(0, 8))}</code>`;
+  const sessRows = live.map((x) => `<li><b>${esc(x.title || x.sid.slice(0, 8))}</b> <span class="tag ${x.status === 'busy' ? 'active' : ''}">${esc(label(x.status))}</span> ${agoSpan(x.last)} ${sidCode(x.sid)}</li>`).join('')
+    + (i.session && !live.some((x) => x.sid === i.session) ? `<li>${sidCode(i.session)} <span class="sess">не запущена</span></li>` : '');
   const kv = [
     ['Продолжить', i.resume && `<code class="copy" data-copy="${esc(i.resume)}" tabindex="0" title="Скопировать">${esc(i.resume)}</code>`],
     ['Каталог', `<code class="copy" data-copy="${esc(i.dir)}" tabindex="0" title="Скопировать">${esc(i.dir)}</code>`],
     ['Связи', links],
-    ['Handoff', i.updated && esc(i.updated) + (i.stale ? ` · новее него файлов: ${i.stale}` : '')],
-    ['Сессия', i.session && `<code class="copy" data-copy="${esc(i.session)}" tabindex="0">${esc(i.session)}</code>`],
-    ['Сессии', sessRows && `<ul class="slist">${sessRows}</ul>`],
+    ['Передача', i.updated && `<span title="${esc(i.updated)}">${esc(stampText(i.updated))}</span>` + (i.stale ? ` · новее неё файлов: ${i.stale}` : '')],
+    [live.length > 1 ? 'Сессии' : 'Сессия', sessRows && `<ul class="slist">${sessRows}</ul>`],
   ].filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
   const info = `<section class="t-info"><h4 class="asks">Сведения</h4><dl class="kv">${kv}</dl></section>`;
 
   const tabs = [
     { id: 'q', title: 'Вопросы', n: nWait(i), tone: nWait(i) ? 'wait' : '', show: plan.some((p) => p.status === 'wait'), html: qPanel },
-    { id: 'plan', title: 'План', n: work.length ? `${work.filter((p) => p.state === 'done').length}/${work.length}` : '', show: true, html: pPanel },
+    { id: 'plan', title: 'План', n: work.length ? `${nDone} из ${work.length}` : '', show: true, html: pPanel,
+      tip: 'Сделано или пропущено из всех пунктов плана; вопросы, ждущие ответа, и открытые просьбы не считаются' },
     { id: 'files', title: 'Файлы', n: docs.length, show: true, html: fPanel },
   ].filter((t) => t.show);
   const cur = tabs.find((t) => t.id === ctab[ref])?.id || (nWait(i) ? 'q' : 'plan');
-  const bar = `<div class="t-tabs" role="tablist">${tabs.map((t) => `<button role="tab" class="t-tab${t.id === cur ? ' on' : ''}" aria-selected="${t.id === cur}"
+  const bar = `<div class="t-tabs" role="tablist">${tabs.map((t) => `<button role="tab" class="t-tab${t.id === cur ? ' on' : ''}" aria-selected="${t.id === cur}"${t.tip ? ` title="${esc(t.tip)}"` : ''}
     data-act="ctab" data-ref="${esc(ref)}" data-v="${t.id}">${t.title}${t.n ? ` <b class="${t.tone || ''}">${t.n}</b>` : ''}</button>`).join('')}</div>`;
   // вариант B: паспорт задачи слева (вспомнить), работа справа (шкала этапов, вкладки); на узком — друг под другом
   return `<article class="task ${mode}" data-ref="${esc(ref)}">${head}<div class="t-body"><div class="t-pass">${summary}${info}</div>
@@ -524,7 +545,7 @@ function itemRow(i, child, kids, last) {
       ${(i.waits || []).length ? `<span class="tag blocked" title="Заблокирована незавершёнными задачами">⏳ Ждёт ${esc(i.waits.join(', '))}</span>` : ''}
       ${claimTag(i)} ${holdTags(i)}
       ${i.status ? `<span class="tag ${esc(i.status)}">${esc(label(i.status))}</span>` : ''}
-      ${i.stale ? '<span class="tag stale" title="Файлы новее handoff">Устарел</span>' : ''}
+      ${i.stale ? '<span class="tag stale" title="Файлы задачи новее её передачи (handoff): описание могло отстать">Передача устарела</span>' : ''}
       ${remainTag(i)}${pct}
       <span class="sess">${s.n ? `<b>●${s.n}</b> ${agoSpan(s.last)}` : ''}</span>
       ${cardBtn(i)}
@@ -768,7 +789,7 @@ function kwRulesRow() {
     <label>с <input type="time" data-f="from" value="${esc(r.from)}"></label><label>до <input type="time" data-f="to" value="${esc(r.to)}"></label>
     <select data-f="mode"><option value="until"${r.mode === 'until' ? ' selected' : ''}>до конца интервала</option><option value="pings"${r.mode === 'pings' ? ' selected' : ''}>по числу прогревов</option></select>
     <label${r.mode === 'pings' ? '' : ' hidden'}><input type="number" data-f="pings" min="1" max="48" value="${esc(r.pings || 6)}"> прогревов</label>
-    <span class="kwkinds" title="Для каких видов задач сессия ставит таймер сама, без просьбы">Ставить самим: ${KINDS.map(([k, t]) => `<label><input type="checkbox" data-f="kind" value="${k}"${(r.kinds || ['task']).includes(k) ? ' checked' : ''}>${t}</label>`).join('')}</span></div>`;
+    <span class="kwkinds" title="Для каких видов задач сессия ставит таймер сама, без просьбы">Сессии ставят таймер сами: ${KINDS.map(([k, t]) => `<label><input type="checkbox" data-f="kind" value="${k}"${(r.kinds || ['task']).includes(k) ? ' checked' : ''}>${t}</label>`).join('')}</span></div>`;
   return { key: 'kw-rules', cls: 'row kwg kwrules', html: `<div data-kwr>
     <p class="sess">Настройки проверяются сверху вниз по текущему дню и времени — срабатывает первая подошедшая, остальные не смотрятся.
       Не подошла ни одна — один прогрев. Интервал через полночь (23:00–02:00) относится к дню начала. «Сегодня до» важнее настроек.</p>
@@ -794,7 +815,7 @@ function kwGraphRow() {
     <label title="Сегодня работаем до: день рабочий до этого времени, таймеры по умолчанию тянутся до него">Сегодня до
       <input type="time" data-g="dayend" value="${esc(hm(k.today?.end))}"></label>
     <label${hide} title="Сессия сама ставит keepwarm до конца рабочего дня; выключено — только по просьбе. По видам задач — в расширенной настройке">
-      <input type="checkbox" data-g="autoStart"${g.autoStart === false ? '' : ' checked'}> Ставить самим</label>
+      <input type="checkbox" data-g="autoStart"${g.autoStart === false ? '' : ' checked'}> Сессии ставят таймер сами</label>
     <label title="Несколько графиков: свои дни, интервал, способ поддержания и виды задач"><input type="checkbox" data-g="rulesOn"${ext ? ' checked' : ''}> Расширенная настройка</label>
   </div>` };
 }
@@ -849,7 +870,7 @@ function renderSessions() {
       <span class="sess">${s.task ? 'задача ' + esc(s.task) : 'без задачи'}</span>
       ${holds().filter((h) => h.sid === s.sid).map((h) => `<span class="tag hold" title="${esc(holdTip(h))}">Держит: ${esc(h.res)}</span><button class="ibtn" data-act="free" data-res="${esc(h.res)}" title="Снять захват «${esc(h.res)}»">×</button>`).join('')}
       ${holds().filter((h) => (h.queue || []).some((q) => q.sid === s.sid)).map((h) => `<span class="tag wait" title="Занято: ${esc(holdTip(h))}">Ждёт: ${esc(h.res)}</span>`).join('')}
-      <span class="sess">Последнее ${agoSpan(s.last)}</span>
+      <span class="sess">Активность ${agoSpan(s.last, true)}</span>
       ${kw && s.alive ? (src('keepwarm').all_off ? '<span class="sess" title="Выключен рубильником model в настройках">Keepwarm выкл.</span>'
         : `<label class="sess"><input type="checkbox" data-act="keepwarm" data-sid="${esc(s.sid)}" ${off.has(s.sid) ? '' : 'checked'}> Keepwarm</label>
           ${kwSummary(s.sid) ? `<span class="tag" title="Свои настройки keepwarm этой сессии">${esc(kwSummary(s.sid))}</span>` : ''}
@@ -911,7 +932,7 @@ function ntFiles(list) {
 }
 async function ntSave() {
   const title = $('#nttitle').value.trim();
-  if (!title) { toast('Нужно название'); $('#nttitle').focus(); return; }
+  if (!title) { toast('Нужно название задачи');$('#nttitle').focus(); return; }
   const stat = $('#ntstat'), btn = $('[data-act="ntsave"]');
   btn.disabled = true; stat.textContent = 'Создаю…';
   const r = await post('tabs', 'create', { tab: nt.tab, kind: nt.kind, project: $('#ntproj').value.trim(), title, goal: $('#ntgoal').value,
@@ -927,7 +948,7 @@ async function ntSave() {
   const ref = nt.tab + '|' + r.id;
   nt = null; render();
   if (bad.length) toast('Задача создана, файлы не легли: ' + bad.join('; '), 8000);
-  else toast(`Создано: ${r.dir}`, 4000);
+  else toast(`Задача создана: ${r.dir}`, 4000);
   sel[view] = ref; store.set('sel', sel);
 }
 document.addEventListener('dragover', (e) => { const f = e.target.closest?.('#ntf'); if (f) { e.preventDefault(); $('#ntdrop').classList.add('over'); } });
@@ -950,9 +971,9 @@ function renderBoard() {
     html: `<div class="bf"><label class="sess" title="Доска — общий файл объявлений для сессий: у 1С-проекта своя на каждую ИБ (из .dev.env), без 1С — доска машины (SESSION_BOARD)">Доска
         <select data-act="bsel">${boards.map((x) => `<option value="${esc(x.name)}"${x.name === cur ? ' selected' : ''}>${esc(label(x))}</option>`).join('')}</select></label>
       <input id="btext" type="text" placeholder="Объявление сессиям — от лица «${esc(b.owner || 'владелец')}»">
-      <label class="sess" title="Новое объявление с тем же ключом заменяет ваше прежнее (старое остаётся в истории). Пусто — не заменяет. ib, stop, branch — блокирующие, по умолчанию 2 ч">Ключ
+      <label class="sess" title="Новое объявление с тем же ключом заменяет ваше прежнее (старое остаётся в истории). Пусто — не заменяет. ib, stop, branch — блокирующие, по умолчанию 2 ч">Ключ замены
         <input id="bkey" type="text" value="${esc(b.key || '')}"></label>
-      <label class="sess" title="Через сколько часов объявление уйдёт само">Срок <input id="bhours" type="number" min="0" value="${esc(boardForm.hours)}"> ч</label>
+      <label class="sess" title="Через сколько часов объявление уйдёт само">Срок, ч <input id="bhours" type="number" min="0" value="${esc(boardForm.hours)}"></label>
       <button class="btn primary" data-act="bsay" data-mode="new">Объявить</button></div>`,
   }];
   const stLabel = { active: 'действует', replaced: 'заменено', closed: 'снято закрытием', expired: 'истекло' };
@@ -968,7 +989,7 @@ function renderBoard() {
   });
   for (const x of boards) {
     rows.push({ key: 'bh:' + x.name, cls: 'tabsec', html: `<h2>${esc(label(x))} <span class="cnt">${x.notes.length}</span></h2>` });
-    if (!x.notes.length) rows.push({ key: 'bn0:' + x.name, cls: 'empty', html: 'действующих объявлений нет' });
+    if (!x.notes.length) rows.push({ key: 'bn0:' + x.name, cls: 'empty', html: 'Действующих объявлений нет' });
     for (const n of x.notes) rows.push(noteRow(x, n, false));
     const hk = 'bhist:' + x.name;
     if ((x.history || []).length) rows.push({ key: 'bhm:' + x.name, cls: 'morep', html: moreRow(hk, x.history.length, 'история (все строки, новые сверху)') });
@@ -986,8 +1007,9 @@ function renderInbox() {
   const all = src('tabs').tabs || [];
   const isAsked = (i) => (i.plan || []).some((p) => p.status === 'wait' && !p.act);
   const isActing = (i) => (i.plan || []).some((p) => p.status === 'wait' && p.act);
-  const st = subtabs(all.filter((t) => items().some((i) => inTab(i, t) && (isAsked(i) || isActing(i) || nReq(i)))),
-    (t) => items().filter((i) => inTab(i, t)).reduce((s, i) => s + nWait(i) + nAct(i), 0), true);
+  // подвкладка — только тип задач, где что-то ждёт ответа: фильтр без счётчика вёл бы в пустоту
+  const nTab = (t) => items().filter((i) => inTab(i, t)).reduce((s, i) => s + nWait(i) + nAct(i), 0);
+  const st = subtabs(all.filter((t) => nTab(t) > 0), nTab, true);
   const inSub = (i) => !st || !st.cur || inTab(i, { id: st.cur });
   const asked = items().filter((i) => isAsked(i) && inSub(i));
   const withReq = items().filter((i) => nReq(i) && inSub(i));
@@ -1003,7 +1025,7 @@ function renderInbox() {
     const acts = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && p.act ? planRow(i, p, k, false, true, true) : '')).join('') : '';
     rows.push({ key: 'act:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded') + (nDraftOf(i, 'act') ? ' dirty' : ''),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
-        ${draftTag(i, 'act')}${nAct(i) ? `<span class="tag wait">Действия: ${nAct(i)}</span>` : ''}${cardBtn(i)}</div>${open ? `<ul class="plan">${acts}</ul>${submitHtml(i, 'act')}` : ''}` });
+        ${draftTag(i, 'act')}${cardBtn(i)}</div>${open ? `<ul class="plan">${acts}</ul>${submitHtml(i, 'act')}` : ''}` });
   }
   const answered = items().filter((i) => nQa(i) && inSub(i));
   if (answered.length) rows.push(sec('ib:qa', 'Ответы на ваши вопросы', answered.reduce((s, i) => s + nQa(i), 0)));
@@ -1030,7 +1052,7 @@ function renderInbox() {
     const n = nWait(i), done = (i.plan || []).filter((p) => p.status === 'wait' && !p.act).length - n;
     rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded') + (nDraftOf(i, 'q') ? ' dirty' : ''),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
-        ${draftTag(i, 'q')}${n ? `<span class="tag wait">Вопросы: ${n}</span>` : ''}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
+        ${draftTag(i, 'q')}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
         ${open ? `${n ? reviewBtn(i) : ''}${asks}${submitHtml(i, 'q')}` : ''}` });
   }
   // просьбы владельца ждут агента, не его — внизу свёрнутой строкой, чтобы видеть неразобранное
@@ -1041,7 +1063,7 @@ function renderInbox() {
     const reqs = open ? (i.plan || []).map((p, k) => (openReq(p) ? planRow(i, p, k, false) : '')).join('') : '';
     rows.push({ key: 'inr:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded'),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
-        <span class="tag req">Просьбы: ${nReq(i)}</span>${cardBtn(i)}</div>${open ? `<ul class="plan">${reqs}</ul>` : ''}` });
+        <span class="sess">${nReq(i)}</span>${cardBtn(i)}</div>${open ? `<ul class="plan">${reqs}</ul>` : ''}` });
   }
   return rows;
 }
@@ -1066,12 +1088,14 @@ function kcard(i) {
 }
 function renderKanban() {
   const tabs = src('tabs').tabs || [];
-  const st = subtabs(tabs.filter((t) => items().some((i) => inTab(i, t))), (t) => items().filter((i) => inTab(i, t) && !isClosed(i)).length);
-  const list = items().filter((i) => !isClosed(i) && (!st || !st.cur || inTab(i, { id: st.cur })))
+  // канбан — задачи без идей: счётчики подвкладок и колонки считают одно и то же
+  const st = subtabs(tabs.filter((t) => items().some((i) => inTab(i, t))), (t) => items().filter((i) => inTab(i, t) && !isClosed(i)).length,
+    false, items().some((i) => i.kind === 'idea') ? 'без идей' : '');
+  const list = items().filter((i) => !isClosed(i) && i.kind !== 'idea' && (!st || !st.cur || inTab(i, { id: st.cur })))
     .sort((a, b) => (a.priority || 3) - (b.priority || 3) || nWait(b) - nWait(a) || (b.changed || 0) - (a.changed || 0));
   const cols = KANBAN.map(([id, title]) => ({ id, title, items: [] }));
   for (const i of list) cols[KANBAN.findIndex(([, , f]) => f(i))].items.push(i);
-  const nDone = items().filter((i) => isClosed(i) && (!st || !st.cur || inTab(i, { id: st.cur }))).length;
+  const nDone = items().filter((i) => isClosed(i) && i.kind !== 'idea' && (!st || !st.cur || inTab(i, { id: st.cur }))).length;
   return [...(st ? [st.row] : []), { key: 'kb', cls: 'kanban', html: cols.map((c) => `<section class="kcol ${c.id}"><h3>${c.title} <span class="cnt">${c.items.length}</span></h3>
     ${c.items.map(kcard).join('') || '<p class="sess">—</p>'}</section>`).join('') + (nDone ? `<section class="kcol done"><h3>Сделано <span class="cnt">${nDone}</span></h3><p class="sess">Закрытые задачи — во вкладке задач, «› закрытые»</p></section>` : '') }];
 }
@@ -1145,7 +1169,7 @@ function render() {
   patch($('#nav'), vs.map((v) => ({
     key: v.id,
     cls: v.card ? 'cardwrap' : '',   // × карточки — своя кнопка рядом, не внутри кнопки вкладки
-    html: `<button class="${v.id === view ? 'on' : ''}${v.card ? ' cardtab' : ''}" data-view="${esc(v.id)}"${v.card ? ` title="${esc(cardTip(v.card))}"` : ''}${v.id === view ? ' aria-current="page"' : ''}>${esc(v.title)}${v.wait ? (v.id === 'inbox' ? ` <b class="wbadge" title="Вопросы ждут вашего ответа">${v.wait}</b>` : ' <b class="wdot" title="Здесь есть вопросы к вам">•</b>') : ''}</button>${v.card ? `<button class="x" data-act="close" data-ref="${esc(v.card)}" title="Закрыть карточку" aria-label="Закрыть карточку ${esc(v.title)}">×</button>` : ''}`,
+    html: `<button class="${v.id === view ? 'on' : ''}${v.card ? ' cardtab' : ''}" data-view="${esc(v.id)}"${v.card ? ` title="${esc(cardTip(v.card))}"` : ''}${v.id === view ? ' aria-current="page"' : ''}>${esc(v.title)}${v.wait && v.id === 'inbox' ? ` <b class="wbadge" title="Вопросы ждут вашего ответа">${v.wait}</b>` : ''}</button>${v.card ? `<button class="x" data-act="close" data-ref="${esc(v.card)}" title="Закрыть карточку" aria-label="Закрыть карточку ${esc(v.title)}">×</button>` : ''}`,
   })));
   const v = vs.find((x) => x.id === view);
   const roots = (src('tabs').tabs || []).map((t) => t.root);   // ошибки корней показывает раздел вкладки
@@ -1193,7 +1217,7 @@ document.addEventListener('click', async (e) => {
       if (k === 'review') return kind === 'q';
       return (kind === 'act') === !!((i?.plan || [])[+k] || {}).act; };
     for (const k of Object.keys(drafts)) if (k.startsWith(t.dataset.dir + '|') && mine(k)) delete drafts[k];
-    if (r.ok) toast(`Зафиксировано: ${r.sent}`);
+    if (r.ok) toast(`Ответы зафиксированы: ${r.sent}`);
     afterSubmit();
   } else if (a === 'qgopen') {   // разбор группы вопросов — вкладкой панели; data-n — сразу к рамке этого вопроса
     e.stopPropagation(); openCard(t.dataset.ref);
@@ -1248,7 +1272,7 @@ document.addEventListener('click', async (e) => {
       for (const k of Object.keys(drafts)) if (k.startsWith(i.dir + '|')) delete drafts[k];
       sent += r.sent || 0;
     }
-    toast(`отправлено: ${sent}`);
+    toast(`Ответы зафиксированы: ${sent}`);
     afterSubmit();
   } else if (a === 'bsay') {
     const mode = t.dataset.mode;
@@ -1270,7 +1294,7 @@ document.addEventListener('click', async (e) => {
     t.disabled = true;
     const r = await post('board', 'say', args);
     t.disabled = false;
-    if (r.ok) { if (mode === 'new') $('#btext').value = ''; toast({ new: 'объявлено', edit: 'изменено', delete: 'снято', close: 'тег закрыт' }[mode]); }
+    if (r.ok) { if (mode === 'new') $('#btext').value = ''; toast({ new: 'Объявление опубликовано', edit: 'Объявление изменено', delete: 'Объявление снято', close: 'Тег закрыт, его объявления сняты' }[mode]); }
   } else if (a === 'show') {
     e.stopPropagation();
     shown.has(t.dataset.key) ? shown.delete(t.dataset.key) : shown.add(t.dataset.key);
@@ -1282,7 +1306,7 @@ document.addEventListener('click', async (e) => {
   } else if (a === 'info') {
     toast(t.dataset.text, 6000);
   } else if (a === 'refresh') {
-    await post(t.dataset.source, 'refresh', {}); toast('Обновляю…');
+    await post(t.dataset.source, 'refresh', {}); toast('Обновление запрошено');
   } else if (a === 'release') {
     await post('claims', 'release', { task: t.dataset.task });
   } else if (a === 'newtask') {
@@ -1361,10 +1385,10 @@ document.addEventListener('change', async (e) => {
   const t = e.target;
   if (t.closest('[data-kwr]')) {   // правило расширенного графика — все правила разом, порядок из окна
     if (t.dataset.f === 'mode') t.closest('.kwrule').querySelector('[data-f="pings"]').parentElement.hidden = t.value !== 'pings';
-    try { await post('keepwarm', 'graph', { rules: kwRulesFromDom() }); toast('Сохранено'); } catch (err) { toast('Не сохранилось: ' + err.message); }
+    try { await post('keepwarm', 'graph', { rules: kwRulesFromDom() }); toast('Правила keepwarm сохранены'); } catch (err) { toast('Правила не сохранились: ' + err.message); }
     return;
   }
-  if (t.closest('[data-kws],[data-kwg]')) { try { await kwSave(t); toast('Сохранено'); } catch (err) { toast('Не сохранилось: ' + err.message); } return; }
+  if (t.closest('[data-kws],[data-kwg]')) { try { await kwSave(t); toast('Настройки keepwarm сохранены'); } catch (err) { toast('Настройки не сохранились: ' + err.message); } return; }
   if (t.dataset.act === 'reph') {
     const rk = t.dataset.key + '|r';
     drafts[rk] = t.checked ? '' : null;
@@ -1458,19 +1482,19 @@ function ctxItems(t) {
   if (plan) {
     const all = (src('tabs').plan_statuses || []).filter((x) => x !== 'wait');
     const sts = plan.dataset.status ? all.map((x) => mi('st', esc(label(x)), ` data-v="${x}"${x === plan.dataset.status ? ' class="cur"' : ''}`)).join('') + '<hr>' : '';
-    return { ctx: plan, html: sts + mi('copy', '⧉ Текст пункта', ` data-v="${esc(plan.dataset.text || '')}"`) };
+    return { ctx: plan, html: sts + mi('copy', 'Копировать текст пункта', ` data-v="${esc(plan.dataset.text || '')}"`) };
   }
   if (doc) {
     const path = doc.dataset.path || doc.dataset.doc;
-    return { ctx: doc, html: mi('doc', 'Открыть здесь', ` data-v="${esc(path)}"`, 'Enter') + mi('tab', 'Открыть во вкладке', ` data-v="${esc(path)}"`) + mi('copy', '⧉ Путь', ` data-v="${esc(path)}"`) };
+    return { ctx: doc, html: mi('doc', 'Открыть здесь', ` data-v="${esc(path)}"`, 'Enter') + mi('tab', 'Открыть во вкладке', ` data-v="${esc(path)}"`) + mi('copy', 'Копировать путь', ` data-v="${esc(path)}"`) };
   }
   if (task) {
     const i = findItem(task.dataset.ref);
     if (!i) return null;
-    const pr = [1, 2, 3, 4].map((n) => mi('prio', ['срочно', 'важно', 'обычно', 'потом'][n - 1], ` data-v="${n}"${(i.priority || 3) === n ? ' class="cur"' : ''}`)).join('');
+    const pr = [1, 2, 3, 4].map((n) => mi('prio', ['Срочно', 'Важно', 'Обычно', 'Потом'][n - 1], ` data-v="${n}"${(i.priority || 3) === n ? ' class="cur"' : ''}`)).join('');
     return { ctx: task, html: mi('card', 'Открыть карточку', '', 'Enter') + mi('rename', 'Переименовать вкладку…') + (nWait(i) ? mi('answer', `Ответить на вопросы (${nWait(i)})`) : '')
-      + (i.resume ? mi('copy', '⧉ Продолжить', ` data-v="${esc(i.resume)}"`) : '') + mi('copy', '⧉ id', ` data-v="${esc(i.id)}"`)
-      + mi('copy', '⧉ Каталог', ` data-v="${esc(i.dir)}"`) + '<hr><div class="mh">Приоритет</div>' + pr
+      + (i.resume ? mi('copy', 'Копировать продолжение', ` data-v="${esc(i.resume)}"`) : '') + mi('copy', 'Копировать id', ` data-v="${esc(i.id)}"`)
+      + mi('copy', 'Копировать путь каталога', ` data-v="${esc(i.dir)}"`) + '<hr><div class="mh">Приоритет</div>' + pr
       + ((src('claims').list || {})[i.id] ? '<hr>' + mi('release', 'Отпустить захват') : ''), ref: task.dataset.ref, i };
   }
   return { ctx: null, html: mi('zoom', 'Крупнее', ' data-v="0.1"', 'Ctrl +') + mi('zoom', 'Мельче', ' data-v="-0.1"') + mi('zoom', 'Масштаб 100 %', ' data-v="0"')
@@ -1513,10 +1537,10 @@ function prefsHtml() {
   return `<div class="prefs"><div><div class="lbl">Масштаб</div><span class="seg"><button data-z="-0.1" aria-label="Меньше">A−</button><button data-z="0" title="Сбросить">${Math.round(zoom() * 100)}%</button><button data-z="0.1" aria-label="Больше">A+</button></span>
       <span class="seg">${[1, 1.25, 1.5, 2].map((v) => `<button data-zset="${v}" class="${zoom() === v ? 'on' : ''}">${v * 100}%</button>`).join('')}</span></div>
     ${prefs.scale === undefined && innerWidth > 2600 && devicePixelRatio === 1 ? `<div class="sess">Окно ${innerWidth} px — крупнее? <button class="btn" data-zset="1.5">150 %</button></div>` : ''}
-    <div><div class="lbl">Ширина</div>${seg('width', [['center', 'по центру'], ['full', 'во всю']])}</div>
-    <div><div class="lbl">Тема</div>${seg('theme', [['auto', 'авто'], ['light', 'светлая'], ['dark', 'тёмная']])}</div>
+    <div><div class="lbl">Ширина</div>${seg('width', [['center', 'По центру'], ['full', 'Во всю ширину']])}</div>
+    <div><div class="lbl">Тема</div>${seg('theme', [['auto', 'Авто'], ['light', 'Светлая'], ['dark', 'Тёмная']])}</div>
     ${looks.length > 1 ? `<div><div class="lbl">Оформление</div>${seg('look', looks.map((t) => [t.name, esc(t.title)]))}</div>` : ''}
-    <div><div class="lbl">Стиль вопросов</div>${seg('qstyle', [['visual', 'наглядный'], ['compact', 'компактный']])}</div>
+    <div><div class="lbl">Стиль вопросов</div>${seg('qstyle', [['visual', 'Наглядный'], ['compact', 'Компактный']])}</div>
     <div><button class="btn" data-reset="1">Размеры по умолчанию</button></div></div>`;
 }
 $('#prefs').addEventListener('click', () => {
