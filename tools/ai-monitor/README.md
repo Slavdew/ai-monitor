@@ -1,5 +1,7 @@
 # ai-monitor — панель задач для агентов Claude Code
 
+Что это, зачем и почему так устроено — коротко в [docs/overview.md](../../docs/overview.md).
+
 Замысел и разбор — в каталоге задачи ai-monitor (`PLAN.md`, `ANALYSIS.md`, `reviews/`); задачи ведутся вне
 репозиториев, у владельца — `<tasks_root>\ai-monitor`. Запуск: `start.cmd` или
 `python server.py` → http://127.0.0.1:8770. Python 3.12 stdlib, Node — только для хука keepwarm.
