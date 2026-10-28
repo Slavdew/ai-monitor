@@ -37,10 +37,43 @@ def _pending(cfg):
     data = read_json(_pending_path(cfg), {}) or {}
     return {k: v for k, v in data.items() if isinstance(v, dict)} if isinstance(data, dict) else {}
 
+def split_opts(opts):
+    """«Вариант :: плюс :: минус» → (имена, {имя: {plus, minus}}): плитка варианта показывает плюсы и минусы."""
+    names, optd = [], {}
+    for o in opts:
+        parts = [x.strip() for x in str(o).split('::')]
+        if not parts[0]:
+            continue
+        names.append(parts[0])
+        d = {k: v for k, v in zip(('plus', 'minus'), parts[1:3]) if v}
+        if d:
+            optd[parts[0]] = d
+    return names, optd
+
+
+def set_opts(cfg, dir_, n, opts):
+    """Варианты вопроса заново (с плюсами и минусами): выбранный черновиком вариант, которого больше нет, снимается."""
+    names, optd = split_opts(opts)
+    if names and not 2 <= len(names) <= 4:
+        raise ValueError(f'варианты: 2–4, дано {len(names)}')
+
+    def fn(t):
+        p = tabs.item(t.get('plan', []), n)
+        if not p.get('q'):
+            raise ValueError(f'пункт {n} — не вопрос')
+        p['opts'] = names
+        p['optd'] = optd
+        if not optd:
+            p.pop('optd')
+        if p.get('draft_opt') and p['draft_opt'] not in names and not p['draft_opt'].startswith('@'):
+            p.pop('draft_opt')
+    tabs.update_task(cfg, dir_, fn)
+
+
 def ask(cfg, dir_, text, note='', force=False, opts=(), extra=None):
     """Новый вопрос в план задачи. Похожий открытый вопрос (≥ 0,6 общих слов) — отказ: дополнить его.
     opts — 2–4 коротких варианта ответа (кнопки на странице); «↺ проще» и «Как советуешь» страница добавляет сама."""
-    opts = [o.strip() for o in opts if o.strip()]
+    opts, optd = split_opts(opts)
     star = [o for o in opts if o.startswith('★') or o.lower().rstrip('.') in ('как советуешь', 'рекомендую', 'рекомендуемый')]
     if star:   # рекомендация вариантом дублирует «★ Как советуешь» (владелец 28.10)
         raise ValueError(f'--opt «{star[0]}»: рекомендацию не дублировать вариантом — она в --note, кнопку '
@@ -60,7 +93,9 @@ def ask(cfg, dir_, text, note='', force=False, opts=(), extra=None):
         item['note'] = note
     if opts:
         item['opts'] = opts
-    item.update(extra or {})   # act: ожидаемое действие владельца, cmd — команда к нему
+    if optd:
+        item['optd'] = optd
+    item.update(extra or {})   # act: ожидаемое действие владельца, cmd — команда к нему; details, rec — расширенный вопрос
     task = tabs.update_task(cfg, dir_, lambda t: t.setdefault('plan', []).append(item))
     return len(task['plan'])
 

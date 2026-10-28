@@ -169,6 +169,8 @@ def parser():
         x.add_argument('--how', default=''); x.add_argument('--where', default='')
         x.add_argument('--group', default='')   # ask: группа вопросов одного разбора — вместе в «Ждут вас»
         x.add_argument('--doc', default='')     # ask --group: разбор группы (.md с метками [[q:N]]) — вкладкой в панели
+        x.add_argument('--details', default='')  # ask: описание вопроса (Markdown) — контекст, пример, картинка
+        x.add_argument('--rec', default='')      # ask: вариант, который советуешь (плитка «★ совет»)
     st = sp('set'); st.add_argument('ref'); st.add_argument('rest', nargs='+')
     bt = sp('batch'); bt.add_argument('ref')
     ak = sp('ack'); ak.add_argument('ref'); ak.add_argument('n', nargs='+')
@@ -180,6 +182,7 @@ def parser():
     sp('modules')
     sp('conf').add_argument('key')   # значение настройки (умолчания + личный файл): conf ui.theme
     gp = sp('group'); gp.add_argument('ref'); gp.add_argument('name'); gp.add_argument('--doc', default='')   # разбор группы
+    op = sp('opts'); op.add_argument('ref'); op.add_argument('n'); op.add_argument('vals', nargs='+')   # «Вариант :: плюс :: минус»
     nx = sp('next'); nx.add_argument('--tab'); nx.add_argument('--project'); nx.add_argument('--force', action='store_true')
     rl = sp('release'); rl.add_argument('ref', nargs='?')
     tk = sp('take'); tk.add_argument('ref'); tk.add_argument('--force', action='store_true')
@@ -446,7 +449,7 @@ def _item_fields(pairs):
         k, v = m.group(1), m.group(3)
         if k not in tabs.ITEM_KEYS:
             raise ValueError(f'ключ {k}: у пункта допустимы {", ".join(tabs.ITEM_KEYS)} (поля задачи — set T ключ=… без N)')
-        out[k] = None if v == 'null' or (v == '' and k in ('note', 'section', 'who', 'group')) else v
+        out[k] = None if v == 'null' or (v == '' and k in ('note', 'section', 'who', 'group', 'details', 'rec')) else v
     return out
 
 
@@ -537,8 +540,10 @@ def add(cfg, a):
             doc = os.path.normpath(a.doc if os.path.isabs(a.doc) else os.path.join(d, a.doc))
             if not os.path.isfile(doc):
                 raise ValueError(f'--doc: файла нет: {doc}')
-        n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt,
-                          {'group': a.group} if a.group else None)
+        extra = {k: v for k, v in (('group', a.group), ('details', a.details), ('rec', a.rec)) if v}
+        if a.rec and a.rec not in questions.split_opts(a.opt)[0]:
+            raise ValueError(f'--rec «{a.rec}» — нет среди вариантов --opt')
+        n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt, extra or None)
         if a.group:
             questions.set_group(cfg, d, a.group, doc)
         rest = {k: v for k, v in fields.items() if k in ('section', 'after', 'who')}
@@ -568,6 +573,9 @@ def run(cfg, a):
         return api(cfg, a)
     if a.cmd in ('add', 'ask', 'req', 'act'):
         print(add(cfg, a))
+    elif a.cmd == 'opts':   # варианты готового вопроса заново, с плюсами и минусами: «Вариант :: плюс :: минус»
+        questions.set_opts(cfg, resolve(cfg, a.ref), _num(a.n), a.vals)
+        print(f'ok пункт {a.n}')
     elif a.cmd == 'group':   # вопросы в группу — set T N group="тема"; здесь — разбор группы (.md с [[q:N]])
         d = resolve(cfg, a.ref)
         doc = os.path.normpath(a.doc if os.path.isabs(a.doc) else os.path.join(d, a.doc)) if a.doc else ''

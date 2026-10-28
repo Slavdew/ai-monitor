@@ -270,7 +270,7 @@ def _n(args):
     return int(args['index']) + 1
 
 
-ITEM_KEYS = ('text', 'status', 'note', 'section', 'who', 'after', 'group')   # group — группа вопросов (null — убрать)
+ITEM_KEYS = ('text', 'status', 'note', 'section', 'who', 'after', 'group', 'details', 'rec')   # group — группа вопросов; details, rec — расширенный вопрос (null — убрать)
 
 
 def apply_item(cfg, plan, n, fields):

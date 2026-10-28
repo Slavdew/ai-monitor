@@ -179,7 +179,11 @@ function qaHtml(i, p, k, edit) {
     : p.seen && (p.answers || []).length ? '<span class="sess ok">✓✓ Принято агентом</span>' : '';
   const asked = p.rephrase ? `<div class="ans">Просьба перефразировать${p.rephrase.text !== 'проще' ? ': ' + esc(p.rephrase.text) : ''} <span class="sess">· ${fmtTime(p.rephrase.at)}</span></div>` : '';
   const was = p.was ? `<div class="sess was">Было: <s>${esc(p.was)}</s></div>` : '';
-  const advice = p.note ? `<div class="advice"><span class="lbl">${p.act ? 'Пояснение' : 'Совет агента'}</span> ${md(p.note, true, i)}</div>` : '';
+  // расширенный вопрос: описание (details), ссылка к своему месту в разборе группы; совет — после описания
+  const gdoc = p.group && ((i.groups || {})[p.group] || {}).doc;
+  const toDoc = gdoc && !qInDoc ? ` <button class="linkbtn" data-act="qgopen" data-ref="${esc(i.tab + '|' + i.id + '|g:' + p.group)}" data-n="${k + 1}">к разделу разбора ›</button>` : '';
+  const details = p.details || toDoc ? `<div class="qdet mdx">${md(p.details, false, i)}${toDoc}</div>` : '';
+  const advice = details + (p.note ? `<div class="advice"><span class="lbl">${p.act ? 'Пояснение' : 'Совет агента'}</span> ${md(p.note, true, i)}</div>` : '');
   const at = `data-key="${esc(key)}" data-dir="${esc(i.dir)}" data-index="${k}"`;
   const draft = drafts[key] ?? p.draft ?? '';
   const opt = optOf(p, key);
@@ -191,11 +195,16 @@ function qaHtml(i, p, k, edit) {
   }
   const open = awaiting(p) || draft || opt || shown.has('add:' + key);
   if (!open) return `<div class="qa">${advice}${was}${answers}${asked}${status}${p.status === 'wait' ? `<span><button class="btn sm" data-act="show" data-key="add:${esc(key)}">Дополнить ответ</button></span>` : ''}</div>`;
+  // у вопроса варианты — плитками (имя, плюсы, минусы, «★ совет»), у действия — кнопками; «Проще» и «Как советуешь»
+  // — кнопками над ними; всё в одной группе выбора: один выбранный вариант на вопрос
+  const tiles = !p.act;
   const opts = [['@reword', 'Вопрос непонятен — агент перепишет проще; в поле — что именно непонятно'],
-    ...(p.note && !p.act ? [['@advice', 'ответ — совет агента; в поле — дополнение']] : []), ...(p.opts || []).map((o) => [o, ''])];
-  const bar = `<div class="qopts" role="radiogroup" aria-label="Варианты ответа">${opts.map(([v, tip]) =>
-    `<button class="qopt${v === opt ? ' on' : ''}${v === '@reword' ? ' rw' : v === '@advice' ? ' adv' : ''}" role="radio" aria-checked="${v === opt}"
-      data-act="qopt" ${at} data-v="${esc(v)}"${tip ? ` title="${esc(tip)}"` : ''}>${esc(optName(v))}</button>`).join('')}</div>`;
+    ...(p.note && !p.act ? [['@advice', 'ответ — совет агента; в поле — дополнение']] : []), ...(tiles ? [] : (p.opts || []).map((o) => [o, '']))];
+  const chip = ([v, tip]) => `<button class="qopt${v === opt ? ' on' : ''}${v === '@reword' ? ' rw' : v === '@advice' ? ' adv' : ''}" role="radio" aria-checked="${v === opt}"
+      data-act="qopt" ${at} data-v="${esc(v)}"${tip ? ` title="${esc(tip)}"` : ''}>${esc(optName(v))}</button>`;
+  const tile = (o) => { const d = (p.optd || {})[o] || {};
+    return `<button class="qopt qtile${o === opt ? ' on' : ''}" role="radio" aria-checked="${o === opt}" data-act="qopt" ${at} data-v="${esc(o)}">${p.rec === o ? '<span class="qrec">★ совет</span>' : ''}<b>${esc(o)}</b>${d.plus ? `<span class="qplus">${md(d.plus, true, i)}</span>` : ''}${d.minus ? `<span class="qminus">${md(d.minus, true, i)}</span>` : ''}</button>`; };
+  const bar = `<div class="qopts" role="radiogroup" aria-label="Варианты ответа">${opts.map(chip).join('')}${tiles && (p.opts || []).length ? `<div class="qtiles">${p.opts.map(tile).join('')}</div>` : ''}</div>`;
   const ph = opt === '@reword' ? 'Что непонятно (необязательно)'
     : opt ? `Дополнение к «${optName(opt)}» (необязательно)` : p.answers ? 'Дополнить ответ' : 'Свой ответ — или выберите вариант';
   return `<div class="qa">${advice}${was}${answers}${asked}${status}${bar}
@@ -679,6 +688,7 @@ function qGrouped(i, pred) {
   return gs + (loose.length ? `<ul class="plan">${loose.map((k) => planRow(i, plan[k], k, false, true)).join('')}</ul>` : '');
 }
 
+let qInDoc = false;   // вопрос рисуется внутри своего разбора — ссылка «к разделу разбора» не нужна
 const mdCache = {};   // текст .md разборов групп: грузится раз на открытие панели, потом — render
 function mdDoc(path) {
   if (mdCache[path]) return mdCache[path].text;
@@ -693,7 +703,8 @@ function renderQGroup(ref, g) {
   const plan = i.plan || [], doc = ((i.groups || {})[g] || {}).doc, used = new Set();
   const ks = plan.map((p, k) => (p.group === g && p.q ? k : -1)).filter((k) => k >= 0);
   // вопрос в тексте — рамкой «Вопрос N»: видно, где спрашивают и какие варианты; ответ — тот же черновик, что в «Ждут вас»
-  const qbox = (k) => `<div class="qslot"><div class="qslot-h">Вопрос ${k + 1}</div><ul class="plan">${planRow(i, plan[k], k, false, true, false, true)}</ul></div>`;
+  const qbox = (k) => { qInDoc = true;
+    try { return `<div class="qslot" data-n="${k + 1}"><div class="qslot-h">Вопрос ${k + 1}</div><ul class="plan">${planRow(i, plan[k], k, false, true, false, true)}</ul></div>`; } finally { qInDoc = false; } };
   let body = doc ? '' : '<p class="sess">У группы нет разбора — только вопросы</p>';
   if (doc) {
     const text = mdDoc(doc);
@@ -1176,8 +1187,11 @@ document.addEventListener('click', async (e) => {
       return (kind === 'act') === !!((i?.plan || [])[+k] || {}).act; };
     for (const k of Object.keys(drafts)) if (k.startsWith(t.dataset.dir + '|') && mine(k)) delete drafts[k];
     if (r.ok) toast(`Зафиксировано: ${r.sent}`);
-  } else if (a === 'qgopen') {   // разбор группы вопросов — вкладкой панели
+  } else if (a === 'qgopen') {   // разбор группы вопросов — вкладкой панели; data-n — сразу к рамке этого вопроса
     e.stopPropagation(); openCard(t.dataset.ref);
+    const n = t.dataset.n;
+    if (n) { let tries = 0; const seek = () => { const el = document.querySelector(`.qgdoc .qslot[data-n="${n}"]`);
+      if (el) el.scrollIntoView({ block: 'start' }); else if (++tries < 30) setTimeout(seek, 150); }; seek(); }   // разбор грузится не сразу
   } else if (a === 'qreview') {
     const i = items().find((x) => x.dir === t.dataset.dir), on = !(i && reviewOn(i));
     drafts[t.dataset.dir + '|review'] = on;
