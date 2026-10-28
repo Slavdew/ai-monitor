@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from monitor.core import HOME, allowed_file, in_tab_root, load_config, log_call, module_on, modules, now_ms, sources  # noqa: E402
+from monitor import themes  # noqa: E402
 from monitor.sources import tabs  # noqa: E402
 
 def server_log(cfg, text):
@@ -196,6 +197,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.wfile.write(hub.gz[1])
         if path == '/events':
             return self._events()
+        if path == '/theme.css':
+            from urllib.parse import parse_qs, urlsplit
+            q = parse_qs(urlsplit(self.path).query)
+            return self._send(200, themes.css(hub.cfg, (q.get('name') or [''])[0]).encode(), 'text/css')
+        if path == '/themes.json':
+            return self._send(200, json.dumps(themes.listing(hub.cfg), ensure_ascii=False).encode())
         name = 'index.html' if path == '/' else os.path.basename(path)
         file = os.path.join(WEB, name)
         if os.path.isfile(file):

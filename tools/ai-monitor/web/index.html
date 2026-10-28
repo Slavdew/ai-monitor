@@ -4,14 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Панель задач</title>
+<!-- цвета и шрифты — тема web/themes/<имя>.json, CSS собирает сервер; выбор в ⚙ помнит браузер, до отрисовки -->
+<link id="theme" rel="stylesheet" href="theme.css">
+<script>try { const l = (JSON.parse(localStorage.getItem('tm.ui')) || {}).look; if (l) document.getElementById('theme').href = 'theme.css?name=' + encodeURIComponent(l); } catch { /* без памяти — тема по умолчанию */ }</script>
 <style>
-:root { --bg:#f7f7f5; --card:#fff; --fg:#1d1d1b; --mute:#4f4f4a; --line:#a6a69e; --acc:#2f6fdb;
-  --ok:#2e8b57; --tree:#9a9a92; --warn:#a86400; --bad:#c0392b; --wpage:1400px; --side:38%; --vw:780px }
-/* тема: auto — по системе; data-theme на <html> — выбор в ⚙ */
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#171716; --card:#21211f; --fg:#e8e8e3; --mute:#9a9a93;
-  --line:#56564f; --tree:#6a6a63; --acc:#6c9cf0; --ok:#5fbf8a; --warn:#e0a040; --bad:#e57368; } }
-:root[data-theme="dark"] { --bg:#171716; --card:#21211f; --fg:#e8e8e3; --mute:#9a9a93;
-  --line:#56564f; --tree:#6a6a63; --acc:#6c9cf0; --ok:#5fbf8a; --warn:#e0a040; --bad:#e57368; }
+:root { --wpage:1400px; --side:38%; --vw:780px }
+/* режим: auto — по системе; data-theme на <html> — выбор в ⚙ */
 :focus-visible { outline:2px solid var(--acc); outline-offset:2px }
 /* системные элементы — в тон теме: схема для полей, свои флажки и полосы прокрутки */
 :root { color-scheme:light dark } :root[data-theme="light"] { color-scheme:light } :root[data-theme="dark"] { color-scheme:dark }
@@ -23,7 +21,7 @@ input[type=checkbox]:hover { border-color:var(--acc) }
 input[type=checkbox]:checked { background:var(--acc); border-color:var(--acc) }
 input[type=checkbox]:checked::after { content:""; width:8px; height:4px; border:2px solid var(--bg); border-top:0; border-right:0; transform:translateY(-1px) rotate(-45deg) }
 * { box-sizing:border-box }
-body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, "Segoe UI", sans-serif }
+body { margin:0; background:var(--bg); color:var(--fg); font:var(--font-size)/1.45 var(--font-ui) }
 header { position:sticky; top:0; z-index:2; background:var(--bg); border-bottom:1px solid var(--line) }
 /* шапка — той же ширины, что содержимое: на UHD вкладки и лимиты не разъезжаются по краям */
 .hwrap { max-width:var(--wpage); margin:0 auto; padding:8px 16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap }
@@ -106,7 +104,7 @@ a.flink { color:var(--acc); text-decoration:underline dotted; text-underline-off
 .head .title, .head .grow { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .head .title { flex:0 1 auto } .head .grow { flex:1 1 0 }
 #list h3 { margin:4px 0 8px }
-.id { font-family:ui-monospace, Consolas, monospace; color:var(--mute); font-size:12px; user-select:all; white-space:nowrap }
+.id { font-family:var(--font-mono); color:var(--mute); font-size:12px; user-select:all; white-space:nowrap }
 .title { font-weight:600 } .grow { flex:1 }
 .tag { font-size:11px; padding:1px 6px; border-radius:10px; border:1px solid var(--line); color:var(--mute); white-space:nowrap }
 .tag.ok { color:var(--ok); border-color:var(--ok) } .tag.par { color:var(--acc); border-color:var(--acc); border-style:dashed }
@@ -173,11 +171,11 @@ th { color:var(--mute); font-weight:500 } tr.dead td { opacity:.5 }
 .t-tab:hover { color:var(--fg) } .t-tab.on { color:var(--fg); border-bottom-color:var(--acc) } .t-tab b { font-weight:600; color:var(--mute) } .t-tab b.wait { color:var(--warn) }
 /* Markdown в тексте задачи (.md — у просмотра документов, своё) */
 .mdx p { margin:0 0 6px } .mdx p:last-child { margin-bottom:0 } .mdx ul, .mdx ol { margin:4px 0 6px; padding-left:20px } .mdx h5 { margin:6px 0 4px; font-size:13px }
-.task code, .plan code { font-family:ui-monospace, Consolas, monospace; font-size:.9em; background:var(--bg); padding:0 4px; border-radius:4px }
+.task code, .plan code { font-family:var(--font-mono); font-size:.9em; background:var(--bg); padding:0 4px; border-radius:4px }
 .tag.prio { font-weight:700 } .tag.prio.bad { color:var(--bad); border-color:var(--bad) } .tag.stage { color:var(--fg) }
 .remain { white-space:nowrap }
 .flist { list-style:none; padding:0; margin:0 } .flist li { display:flex; gap:10px; align-items:baseline; padding:3px 0; min-width:0 }
-.flist a { color:var(--acc); text-decoration:none; white-space:nowrap } .flist .k { font-family:ui-monospace, Consolas, monospace; font-size:11px; color:var(--mute); margin-right:4px }
+.flist a { color:var(--acc); text-decoration:none; white-space:nowrap } .flist .k { font-family:var(--font-mono); font-size:11px; color:var(--mute); margin-right:4px }
 .flist .fpath { font-size:11.5px; color:var(--mute); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; min-width:0 }
 .plan li.psec { cursor:pointer } .plan li.psec .cnt { font-weight:400 }
 .menu hr { border:0; border-top:1px solid var(--line); margin:4px 0 } .menu .mh { font-size:11px; color:var(--mute); padding:2px 14px; text-transform:uppercase; letter-spacing:.04em }
@@ -309,16 +307,16 @@ p:has(> [data-act=submit]) { margin:12px 0 0 }
 /* документы задачи и просмотр справа */
 .docs { display:flex; flex-wrap:wrap; gap:4px 6px }
 .docs a { font-size:12.5px; color:var(--acc); text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:0 7px; background:var(--bg) }
-.docs a:hover { border-color:var(--acc) } .docs .k { font-family:ui-monospace, Consolas, monospace; font-size:11px; color:var(--mute); margin-right:4px }
+.docs a:hover { border-color:var(--acc) } .docs .k { font-family:var(--font-mono); font-size:11px; color:var(--mute); margin-right:4px }
 #viewer { position:fixed; top:0; right:0; bottom:0; width:min(var(--vw), 100vw); background:var(--card); border-left:1px solid var(--line);
-  box-shadow:-8px 0 24px rgb(0 0 0 / .18); display:flex; flex-direction:column; z-index:5 }
+  box-shadow:-8px 0 24px var(--shadow); display:flex; flex-direction:column; z-index:5 }
 #viewer .vh { display:flex; gap:10px; align-items:center; padding:8px 14px; border-bottom:1px solid var(--line) }
 #viewer .vh b { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap } #viewer .vh a { font-size:12px; color:var(--acc) }
 #vbody { flex:1; overflow:auto }
 /* левый край просмотра тянется — ширина помнится */
 #vgrip { position:absolute; left:-4px; top:0; bottom:0; width:8px; cursor:col-resize; touch-action:none } #vgrip:hover, #vgrip.drag { background:var(--acc); opacity:.4 }
 /* меню статуса пункта и настройки вида */
-.menu { position:fixed; z-index:6; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 18px rgb(0 0 0 / .25); padding:4px 0; min-width:140px }
+.menu { position:fixed; z-index:6; background:var(--card); border:1px solid var(--line); border-radius:8px; box-shadow:0 6px 18px var(--shadow); padding:4px 0; min-width:140px }
 .menu button { display:block; width:100%; text-align:left; border:0; background:none; color:var(--fg); font:inherit; font-size:13px; padding:4px 14px; cursor:pointer }
 .menu button:hover, .menu button:focus-visible { background:var(--bg) } .menu button.cur { color:var(--acc) } .menu button.cur::before { content:"✓ " }
 .prefs { padding:8px 12px; display:grid; gap:8px; font-size:13px; min-width:240px } .prefs .lbl { color:var(--mute); font-size:12px }
@@ -334,7 +332,7 @@ body.narrow .cgrid { grid-template-columns:1fr; grid-template-areas:"a" "p" "s" 
 .inbox .dhead { margin-bottom:4px } #vbody iframe { width:100%; height:100%; border:0; background:#fff }
 .md { padding:4px 24px 40px; max-width:860px; margin:0 auto; overflow-wrap:anywhere }
 .md pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px; overflow:auto; font-size:13px }
-.md code { font-family:ui-monospace, Consolas, monospace; font-size:.92em }
+.md code { font-family:var(--font-mono); font-size:.92em }
 .md table { width:auto; border-collapse:collapse; display:block; overflow:auto } .md th, .md td { border:1px solid var(--line); padding:4px 8px }
 .md blockquote { margin:0; padding:2px 12px; border-left:3px solid var(--line); color:var(--mute) }
 .md img { max-width:100% } .md a { color:var(--acc) }

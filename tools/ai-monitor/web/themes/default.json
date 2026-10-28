@@ -1,0 +1,35 @@
+{
+  "title": "Стандартная",
+  "_comment": "Образец темы: свою — копией этого файла в каталог из theme_dirs настроек, можно только отличия. light — светлый режим, dark — тёмный; значения — цвета CSS.",
+  "fonts": {
+    "ui": "system-ui, \"Segoe UI\", sans-serif",
+    "mono": "ui-monospace, Consolas, monospace",
+    "size": "14px"
+  },
+  "light": {
+    "bg": "#f7f7f5",
+    "card": "#fff",
+    "fg": "#1d1d1b",
+    "mute": "#4f4f4a",
+    "line": "#a6a69e",
+    "tree": "#9a9a92",
+    "acc": "#2f6fdb",
+    "ok": "#2e8b57",
+    "warn": "#a86400",
+    "bad": "#c0392b",
+    "shadow": "rgb(0 0 0 / .2)"
+  },
+  "dark": {
+    "bg": "#171716",
+    "card": "#21211f",
+    "fg": "#e8e8e3",
+    "mute": "#9a9a93",
+    "line": "#56564f",
+    "tree": "#6a6a63",
+    "acc": "#6c9cf0",
+    "ok": "#5fbf8a",
+    "warn": "#e0a040",
+    "bad": "#e57368",
+    "shadow": "rgb(0 0 0 / .45)"
+  }
+}

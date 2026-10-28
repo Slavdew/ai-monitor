@@ -38,6 +38,8 @@ const label = (st) => (state.ui?.labels || {})[st] || st;
 const prefs = store.get('ui', {});
 const pref = (k) => prefs[k] ?? (state.ui || {})[k];
 const zoom = () => +pref('scale') || 1;
+let looks = [];   // темы оформления для ⚙: web/themes и theme_dirs
+fetch('/themes.json').then((r) => r.json()).then((l) => { looks = Array.isArray(l) ? l : []; }).catch(() => {});
 let narrow = false;
 function applyPrefs() {
   const z = zoom();
@@ -49,6 +51,8 @@ function applyPrefs() {
   if (prefs.vw) r.setProperty('--vw', prefs.vw + 'px');
   const th = pref('theme');
   if (th === 'light' || th === 'dark') document.documentElement.dataset.theme = th; else delete document.documentElement.dataset.theme;
+  const look = $('#theme'), href = 'theme.css' + (prefs.look ? '?name=' + encodeURIComponent(prefs.look) : '');
+  if (look && look.getAttribute('href') !== href) look.setAttribute('href', href);
   const was = narrow;
   narrow = innerWidth / z < 820;   // порог в пикселях страницы: с масштабом узкий режим наступает раньше
   document.body.classList.toggle('narrow', narrow);
@@ -1389,6 +1393,7 @@ function prefsHtml() {
     ${prefs.scale === undefined && innerWidth > 2600 && devicePixelRatio === 1 ? `<div class="sess">Окно ${innerWidth} px — крупнее? <button class="btn" data-zset="1.5">150 %</button></div>` : ''}
     <div><div class="lbl">Ширина</div>${seg('width', [['center', 'по центру'], ['full', 'во всю']])}</div>
     <div><div class="lbl">Тема</div>${seg('theme', [['auto', 'авто'], ['light', 'светлая'], ['dark', 'тёмная']])}</div>
+    ${looks.length > 1 ? `<div><div class="lbl">Оформление</div>${seg('look', looks.map((t) => [t.name, esc(t.title)]))}</div>` : ''}
     <div><button class="btn" data-reset="1">Размеры по умолчанию</button></div></div>`;
 }
 $('#prefs').addEventListener('click', () => {

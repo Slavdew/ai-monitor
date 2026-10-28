@@ -25,7 +25,7 @@
   "plan_statuses": ["todo", "doing", "done", "skip", "wait", "later"],
   "plan_mode": "sequential",
   "_ui": "Вид страницы по умолчанию; владелец меняет в ⚙ (запоминает браузер). scale — масштаб (1 = 100 %), width — center|full, max_width — предел ширины при center, split — доля предпросмотра, theme — auto|light|dark, labels — подписи статусов плана",
-  "ui": { "scale": 1, "width": "center", "max_width": 1400, "split": 0.38, "theme": "auto",
+  "ui": { "scale": 1, "width": "center", "max_width": 1400, "split": 0.38, "theme": "auto", "look": "default",
           "labels": { "todo": "К работе", "doing": "В работе", "done": "Сделано", "skip": "Пропуск", "wait": "Ждёт вас", "later": "Отложено",
                       "active": "В работе", "paused": "Пауза", "busy": "Работает", "idle": "Ждёт" } },
 
@@ -39,6 +39,8 @@
 
   "_modules": "Модули — каталоги с module.json в modules/ панели и в module_dirs (команда, личные). Умолчания модуля — settings его манифеста; здесь и в личном файле — только отличия: sources.<имя> (enabled: false — выключить). Список и ошибки — task.py modules.",
   "module_dirs": [],
+  "_themes": "Темы оформления — web/themes/<имя>.json и каталоги theme_dirs (свои; то же имя перекрывает). Образец — web/themes/default.json; своя тема может задать только отличия. Тема по умолчанию — ui.look, выбор — ⚙ на странице.",
+  "theme_dirs": [],
   "sources": {
     "tabs": { "enabled": true }
   }
