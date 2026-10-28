@@ -310,7 +310,8 @@ p:has(> [data-act=submit]) { margin:12px 0 0 }
 .btn.on { border-color:var(--acc); color:var(--acc) } .qrev { margin:2px 0 8px }
 /* блок с неотправленными черновиками: полоса слева во всю высоту, строка отправки липнет к низу экрана (вариант А) */
 .row.card.dirty { border-left:4px solid var(--acc) } .tag.draftn { color:var(--acc); border-color:var(--acc) }
-.qsubmit.stick { position:sticky; bottom:0; z-index:1; background:var(--card); border-top:1px solid var(--acc); margin:6px -16px -16px; padding:4px 16px 2px; border-radius:0 0 8px 8px }
+.qsubmit.stick { position:sticky; bottom:0; z-index:1; background:var(--card); border-top:1px solid var(--acc); margin:6px -16px -16px; padding:8px 16px 10px; border-radius:0 0 8px 8px }
+.qsubmit.stick > p { margin:0 }   /* поля строки — её padding: снизу кнопка не прижата к краю окна */
 /* разделы вкладок внутри группы */
 .tabsec h2 { margin:14px 0 4px; font-size:13px; font-weight:600; color:var(--mute); cursor:pointer; user-select:none }
 .tabsec h2:hover { color:var(--fg) } .tabsec.static h2 { cursor:default } .tabsec.static h2:hover { color:var(--mute) }
