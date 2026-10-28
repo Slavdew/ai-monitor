@@ -215,7 +215,9 @@ function qaHtml(i, p, k, edit) {
   if (!open) return `<div class="qa">${advice}${was}${answers}${asked}${status}${p.status === 'wait' ? `<span><button class="btn sm" data-act="show" data-key="add:${esc(key)}">Дополнить ответ</button>${shown.has('qx:' + key) ? ` <button class="linkbtn" data-act="show" data-key="qx:${esc(key)}">Свернуть</button>` : ''}</span>` : ''}</div>`;
   // у вопроса варианты — плитками (имя, плюсы, минусы, «★ совет»), у действия — кнопками; «Проще» и «Как советуешь»
   // — кнопками над ними; всё в одной группе выбора: один выбранный вариант на вопрос
-  const tiles = !p.act && pref('qstyle') !== 'compact';   // стиль вопросов в ⚙: наглядный (плитки, описание) или компактный
+  // стиль вопросов в ⚙: наглядный (плитки, описание) или компактный; варианты без плюсов, минусов и «★ совет» —
+  // кнопками и в наглядном: плитка во всю треть ширины ради «Да» — пустая полоса (аудит 29.10, Н3)
+  const tiles = !p.act && pref('qstyle') !== 'compact' && !!(Object.keys(p.optd || {}).length || p.rec);
   // без плиток (компактный стиль, действие) «Переспросить проще» — ссылкой в конце ряда: не похоже на один из ответов (Н5)
   const rw = ['@reword', 'Вопрос непонятен — агент перепишет проще; в поле — что именно непонятно'];
   const opts = [...(tiles ? [rw] : []),
@@ -1477,7 +1479,46 @@ document.addEventListener('change', async (e) => {
 async function pull() {
   const r = await fetch('/state.json');
   const s = await r.json();
-  if (s.rev !== state.rev) { const first = !state.ui; state = s; if (first) applyPrefs(); render(); }
+  if (s.rev !== state.rev) { const first = !state.ui, old = state; state = s; if (first) applyPrefs(); else notifyDiff(old, s); render(); }
+}
+
+// тосты об изменениях справа внизу: браузер сравнивает прежнее и новое состояние — токены модели не тратятся.
+// ⚙ «Уведомления»: work — ждёт вас и ход работы, wait — только ждёт вас, off. Свои действия тостов не дают:
+// фиксация и просьбы не меняют того, что здесь отслеживается.
+function notifyDiff(old, cur) {
+  const mode = pref('notify') || 'work';
+  if (mode === 'off') return;
+  const prev = new Map(((old.sources || {}).tabs?.items || []).map((i) => [i.tab + '|' + i.id, i]));
+  const short = (t) => { const s = String(t || '').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim(); return s.length > 90 ? s.slice(0, 89) + '…' : s; };
+  for (const i of (cur.sources || {}).tabs?.items || []) {
+    const o = prev.get(i.tab + '|' + i.id);
+    if (!o) continue;
+    const op = o.plan || [], lines = [];
+    let ask = false, bad = false;
+    (i.plan || []).forEach((p, k) => {
+      const q = op[k];
+      if (p.status === 'wait' && !p.req && awaiting(p) && (!q || q.status !== 'wait')) {
+        ask = true; bad ||= !!p.blocking;
+        lines.push((p.act ? 'Действие: ' : p.blocking ? 'Блокирует работу: ' : 'Вопрос: ') + short(p.text));
+      } else if (mode === 'work' && q) {
+        if (q.seen === false && p.seen === true && (p.answers || []).length) lines.push('Ответ принят: ' + short(p.text));
+        else if (!p.q && !p.req && q.status !== 'done' && p.status === 'done') lines.push('Сделано: ' + short(p.text));
+      }
+    });
+    if (mode === 'work' && i.stage && o.stage !== i.stage) lines.push('Этап: ' + short(i.stage));
+    if (lines.length) note(i, lines, ask, bad);
+  }
+}
+function note(i, lines, ask, bad) {
+  let box = $('#notes');
+  if (!box) { box = document.createElement('div'); box.id = 'notes'; box.className = 'notes'; box.setAttribute('aria-live', 'polite'); document.body.appendChild(box); }
+  const el = document.createElement('div');
+  el.className = 'note' + (bad ? ' bad' : ask ? ' ask' : '');
+  el.innerHTML = `<button class="x" aria-label="Закрыть">×</button><b>${esc(i.short || i.title)}</b>${lines.slice(0, 3).map((l) => `<div>${esc(l)}</div>`).join('')}${lines.length > 3 ? `<div class="sess">и ещё ${lines.length - 3}</div>` : ''}`;
+  el.addEventListener('click', (e) => { el.remove(); if (e.target.closest('.x')) return; if (ask) go('inbox'); else openCard(i.tab + '|' + i.id); });
+  box.appendChild(el);
+  while (box.children.length > 4) box.firstChild.remove();
+  setTimeout(() => el.remove(), bad ? 20000 : 8000);   // блокирующий — дольше
 }
 
 function go(v) { view = v; store.set('view', view); if (decodeURIComponent(location.hash.slice(1)) !== v) history.pushState(null, '', '#' + v); render(); scrollTo(0, 0); }
@@ -1613,6 +1654,7 @@ function prefsHtml() {
     <div><div class="lbl">Тема</div>${seg('theme', [['auto', 'Авто'], ['light', 'Светлая'], ['dark', 'Тёмная']])}</div>
     ${looks.length > 1 ? `<div><div class="lbl">Оформление</div>${seg('look', looks.map((t) => [t.name, esc(t.title)]))}</div>` : ''}
     <div><div class="lbl">Стиль вопросов</div>${seg('qstyle', [['visual', 'Наглядный'], ['compact', 'Компактный']])}</div>
+    <div><div class="lbl">Уведомления</div>${seg('notify', [['work', 'Ждёт вас и ход работы'], ['wait', 'Только ждёт вас'], ['off', 'Выкл.']])}</div>
     <div><button class="btn" data-reset="1">Размеры по умолчанию</button></div></div>`;
 }
 $('#prefs').addEventListener('click', () => {
