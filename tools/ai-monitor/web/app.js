@@ -108,17 +108,19 @@ function humanDate(ms, time = true) {
 // строка времени из task.json (ISO, иногда только дата) — по-человечески; не разобралась — как есть
 const stampText = (s) => { const ms = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + 'T00:00' : s); return Number.isNaN(ms) ? String(s) : humanDate(ms, /T\d/.test(String(s))); };
 // rel — «11 мин назад» (для подписей вида «Активность …»)
-function ago(ms, rel = false) {
+// dur — длительность и после суток («ждёт 2 дня 3 ч»), а не дата: «ждёт вчера, 05:30» читалось неуклюже
+function ago(ms, rel = false, dur = false) {
   const m = Math.round((Date.now() - ms) / 60000);
   if (m < 1) return 'сейчас';
   const back = rel ? ' назад' : '';
   if (m < 60) return `${m} мин${back}`;
   if (m < 1440) return `${Math.floor(m / 60)} ч ${m % 60} мин${back}`;
+  if (dur) { const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60); return `${d} ${plural(d, 'день', 'дня', 'дней')}${h ? ` ${h} ч` : ''}`; }
   return humanDate(ms);
 }
 const plural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
 const agoSpan = (ms, rel = false) => (ms ? `<span class="ago" data-ts="${ms}"${rel ? ' data-rel="1"' : ''}></span>` : '—');
-function tickAgo() { document.querySelectorAll('.ago').forEach((e) => { e.textContent = ago(+e.dataset.ts, !!e.dataset.rel); }); }
+function tickAgo() { document.querySelectorAll('.ago').forEach((e) => { e.textContent = ago(+e.dataset.ts, !!e.dataset.rel, !!e.dataset.dur); }); }
 
 async function post(source, action, args) {
   const r = await fetch(`/api/${source}/${action}`, { method: 'POST', body: JSON.stringify(args) });
@@ -253,12 +255,12 @@ function planRow(i, p, k, full, answer = full, inActs = false, inGroup = false) 
   const mark = p.state === 'waiting' ? `<span class="dep wait" title="Ждёт пунктов">⏳ После ${p.waits.join(', ')}</span>`
     : p.parallel && full && !p.req && p.state === 'ready' ? '<span class="dep"><span class="tag par" title="Можно вести одновременно с другими готовыми">Можно параллельно</span></span>' : '<span class="dep"></span>';
   // в «Ждут вас» (без меню статусов, с полем ответа) всё и так ждёт вас — метка «Ждёт вас» там лишняя
-  const st = p.status === 'wait' ? (awaiting(p) ? (!full && answer ? '' : `<span class="tag st wait" title="Вопрос: ждёт вашего ответа">${esc(label('wait'))}</span>`)
+  const st = p.status === 'wait' ? (awaiting(p) ? (!full && answer ? '<span class="st" aria-hidden="true"></span>' : `<span class="tag st wait" title="Вопрос: ждёт вашего ответа">${esc(label('wait'))}</span>`)
       : '<span class="tag st ok" title="Ответ отправлен, ждёт агента">Отвечено</span>')
     : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="Сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req && !openReq(p) ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${p.group && !inGroup ? `<button class="tag doc" data-act="qgopen" data-ref="${esc(i.tab + '|' + i.id + '|g:' + p.group)}" title="Вопрос из группы — открыть разбор">${esc(p.group)}</button> ` : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Переспросить проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req && !openReq(p) ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${p.group && !inGroup ? `<button class="tag doc" data-act="qgopen" data-ref="${esc(i.tab + '|' + i.id + '|g:' + p.group)}" title="Вопрос из группы — открыть разбор">${esc(p.group)}</button> ` : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}" data-dur="1"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Переспросить проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i, kind = '') => (i.plan || []).filter((p, k) => (!kind || (kind === 'act') === !!p.act)
   && ((drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k))).length
