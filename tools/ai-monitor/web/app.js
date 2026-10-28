@@ -112,21 +112,6 @@ async function post(source, action, args) {
   else freshen();
   return j;
 }
-// ответы, выбранные в документе разбора (web/qkit.js), — черновиком в его вопрос «ответы в файле» (p.doc);
-// фиксирует владелец сам. Только из своего окна просмотра: документ — в песочнице, источник сверяется.
-addEventListener('message', async (e) => {
-  const frame = document.querySelector('#vbody iframe');
-  if (e.data?.type !== 'ai-monitor/answer' || !frame || e.source !== frame.contentWindow) return;
-  const reply = (text) => { toast(text, 5000); e.source.postMessage({ type: 'ai-monitor/answer-ok', text }, '*'); };
-  const i = items().find((x) => x.id === e.data.task);
-  const p = i && (i.plan || [])[e.data.item - 1];
-  if (!p || !p.q || !p.doc) return reply(`вопроса ${e.data.item} «ответы в файле» в задаче «${e.data.task}» нет — скопируйте ответы вручную`);
-  if (!awaiting(p)) return reply(`вопрос ${e.data.item} уже отвечен — «Дополнить ответ» в панели`);
-  drafts[i.dir + '|' + (e.data.item - 1)] = String(e.data.text || '');
-  await post('tabs', 'draft', { dir: i.dir, index: e.data.item - 1, text: String(e.data.text || '') });
-  render();
-  reply(`ответ на вопрос ${e.data.item} — черновиком в панели; проверьте и зафиксируйте`);
-});
 
 // после своего действия — забрать состояние самой, не дожидаясь сигнала SSE: его держит одна вкладка, фоновую
 // браузер притормаживает, и «Зафиксировать» висело ~15 с (владелец 28.10). Сервер пересобирает сразу после действия.
@@ -238,7 +223,8 @@ async function saveDraft(el) {
 
 // пункт плана; full — карточка: статус меняется меню (в предпросмотре легко задеть случайно);
 // answer — поле ответа у вопроса (карточка и «Ждут вас»)
-function planRow(i, p, k, full, answer = full, inActs = false) {   // inActs — в блоке «Ожидаемые действия»: метка «Действие» там лишняя
+// inActs — в блоке «Ожидаемые действия»: метка «Действие» там лишняя; inGroup — внутри своей группы: метка группы лишняя
+function planRow(i, p, k, full, answer = full, inActs = false, inGroup = false) {
   const mark = p.state === 'waiting' ? `<span class="dep wait" title="Ждёт пунктов">⏳ После ${p.waits.join(', ')}</span>`
     : p.parallel && full && !p.req && p.state === 'ready' ? '<span class="dep"><span class="tag par" title="Можно вести одновременно с другими готовыми">Парал.</span></span>' : '<span class="dep"></span>';
   const st = p.status === 'wait' ? (awaiting(p) ? `<span class="tag st wait" title="Вопрос: ждёт вашего ответа">${esc(label('wait'))}</span>`
@@ -246,7 +232,7 @@ function planRow(i, p, k, full, answer = full, inActs = false) {   // inActs —
     : full ? `<button class="tag st edit" data-act="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" title="Сменить статус" aria-haspopup="true">${esc(label(p.status || 'todo'))} ▾</button>`
       : `<span class="tag st">${esc(label(p.status || 'todo'))}</span>`;
   const ctx = p.status === 'wait' ? '' : ` data-ctx="plan" data-dir="${esc(i.dir)}" data-index="${k}" data-status="${esc(p.status || 'todo')}" data-text="${esc(p.text)}"`;
-  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${p.doc ? '<span class="tag doc" title="Вопросы с вариантами — в файле: выберите там, «Перенести в панель» вставит сводку в ответ">Ответы в файле</span> ' : ''}${md(p.text, true, i)}${p.doc ? ` <a href="#" data-doc="${esc(p.doc)}" title="${esc(p.doc)}">открыть файл ›</a>` : ''}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
+  return `<li class="${esc(p.state)}${p.q ? ' q' : ''}${p.q && p.status === 'wait' && hasDraft(i, p, k) ? ' drafted' : ''}"${ctx}><span class="n">${k + 1}</span>${st}${mark}<span class="t">${p.req ? '<span class="tag req" title="Ваша просьба">Просьба</span> ' : ''}${p.act && !inActs ? '<span class="tag wait" title="Агент ждёт этого действия от вас">Действие</span> ' : ''}${p.group && !inGroup ? `<button class="tag doc" data-act="qgopen" data-ref="${esc(i.tab + '|' + i.id + '|g:' + p.group)}" title="Вопрос из группы — открыть разбор">${esc(p.group)}</button> ` : ''}${md(p.text, true, i)}${p.q && awaiting(p) && p.asked ? ` <span class="sess qage">· ждёт <span class="ago" data-ts="${p.asked}"></span></span>` : ''}${p.req && p.note ? `<span class="sess"> — ${md(p.note, true, i)}</span>` : ''}${p.act && p.cmd ? `<span class="actcmd"><span class="lbl">Выполнить в ${esc(p.where || 'PowerShell')}:</span> <code class="copy" data-copy="${esc(p.cmd)}" tabindex="0" title="Скопировать">${esc(p.cmd)}</code></span>` : ''}${p.act && p.how ? `<span class="actcmd"><span class="lbl">Что сделать:</span> ${md(p.how, true, i)}</span>` : ''}${p.act && !p.cmd && !p.how ? '<span class="actcmd sess">Команды нет — спросите агента через «Проще»</span>' : ''}</span>${p.q ? qaHtml(i, p, k, answer) : ''}</li>`;
 }
 const nDraftOf = (i, kind = '') => (i.plan || []).filter((p, k) => (!kind || (kind === 'act') === !!p.act)
   && ((drafts[i.dir + '|' + k] ?? p.draft ?? '').trim() || rephraseOf(p, i.dir + '|' + k) !== null || optOf(p, i.dir + '|' + k))).length
@@ -563,7 +549,10 @@ async function renderMd(path, box) {
   const r = await fetch(fileUrl(path), { cache: 'no-store' });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'HTTP ' + r.status);
   box.innerHTML = `<div class="md">${DOMPurify.sanitize(marked.parse(await r.text()))}</div>`;
-  // относительные ссылки и картинки — от каталога файла; ссылка на другой .md открывается здесь же
+  mdLinks(box, path);
+}
+// относительные ссылки и картинки — от каталога файла; ссылка на другой .md открывается здесь же
+function mdLinks(box, path) {
   const base = location.origin + fileUrl(path);
   box.querySelectorAll('img[src]').forEach((img) => { img.src = new URL(img.getAttribute('src'), base).href; });
   box.querySelectorAll('a[href]').forEach((a) => {
@@ -675,7 +664,60 @@ function findItem(ref) {
   return (src('tabs').items || []).find((i) => i.tab === tab && i.id === id);
 }
 
+// группы вопросов (поле group, разбор — i.groups[g].doc): в «Ждут вас» — сворачиваемый подблок, ответить можно прямо
+// там; «Открыть разбор» — вкладка «tab|id|g:группа» с текстом .md и живыми вопросами на местах меток [[q:N]]
+function qGrouped(i, pred) {
+  const plan = i.plan || [], ref = i.tab + '|' + i.id, loose = [], groups = new Map();
+  plan.forEach((p, k) => { if (!pred(p)) return; if (p.group) groups.set(p.group, [...(groups.get(p.group) || []), k]); else loose.push(k); });
+  const gs = [...groups].map(([g, ks]) => {
+    const fk = 'qgo:' + ref + '|' + g, open = fold.has(fk), doc = ((i.groups || {})[g] || {}).doc;   // по умолчанию свёрнута
+    const nw = ks.filter((k) => awaiting(plan[k])).length;
+    return `<div class="qgroup"><div class="qgh"><button class="qgfold" data-act="fold" data-id="${esc(fk)}" aria-expanded="${open}">${chev(open)} ${esc(g)}</button>
+      <span class="sess">вопросов: ${ks.length}${nw ? ` · ждут ответа: ${nw}` : ''}</span><span class="grow"></span>${doc ? `<button class="btn" data-act="qgopen" data-ref="${esc(ref + '|g:' + g)}" title="${esc(doc)}">Открыть разбор</button>` : ''}</div>
+      ${open ? `<ul class="plan">${ks.map((k) => planRow(i, plan[k], k, false, true, false, true)).join('')}</ul>` : ''}</div>`;
+  }).join('');
+  return gs + (loose.length ? `<ul class="plan">${loose.map((k) => planRow(i, plan[k], k, false, true)).join('')}</ul>` : '');
+}
+
+const mdCache = {};   // текст .md разборов групп: грузится раз на открытие панели, потом — render
+function mdDoc(path) {
+  if (mdCache[path]) return mdCache[path].text;
+  mdCache[path] = { text: null };
+  fetch(fileUrl(path), { cache: 'no-store' }).then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
+    .then((t) => { mdCache[path].text = t; render(); }, (e) => { mdCache[path].text = `**Разбор не открылся:** ${e.message}`; render(); });
+  return null;
+}
+function renderQGroup(ref, g) {
+  const i = findItem(ref);
+  if (!i) return [{ key: 'card-none', cls: 'empty', html: `Задача ${esc(ref)} больше не найдена` }];
+  const plan = i.plan || [], doc = ((i.groups || {})[g] || {}).doc, used = new Set();
+  const ks = plan.map((p, k) => (p.group === g && p.q ? k : -1)).filter((k) => k >= 0);
+  // вопрос в тексте — рамкой «Вопрос N»: видно, где спрашивают и какие варианты; ответ — тот же черновик, что в «Ждут вас»
+  const qbox = (k) => `<div class="qslot"><div class="qslot-h">Вопрос ${k + 1}</div><ul class="plan">${planRow(i, plan[k], k, false, true, false, true)}</ul></div>`;
+  let body = doc ? '' : '<p class="sess">У группы нет разбора — только вопросы</p>';
+  if (doc) {
+    const text = mdDoc(doc);
+    if (text === null) body = '<p class="sess">Загружаю разбор…</p>';
+    else {
+      const box = document.createElement('div');
+      box.innerHTML = DOMPurify.sanitize(marked.parse(text.replace(/^[ \t]*\[\[q:(\d+)\]\][ \t]*$/gm, '\n<div data-qslot="$1"></div>\n')));
+      mdLinks(box, doc);
+      box.querySelectorAll('[data-qslot]').forEach((el) => {
+        const k = +el.dataset.qslot - 1;
+        if (plan[k] && plan[k].q) { used.add(k); el.outerHTML = qbox(k); } else el.outerHTML = `<p class="sess">[вопроса ${k + 1} в задаче нет]</p>`;
+      });
+      body = box.innerHTML;
+    }
+  }
+  const rest = ks.filter((k) => !used.has(k));
+  return [{ key: 'qg:' + ref, cls: 'row card qgdoc' + (nDraftOf(i, 'q') ? ' dirty' : ''),
+    html: `<div class="dhead"><span class="id">${esc(i.id)}</span><span class="title grow">Разбор: ${esc(g)}</span>${draftTag(i, 'q')}${cardBtn(i)}</div>
+      <div class="md">${body}</div>${rest.length ? `<h4>${doc ? 'Ещё вопросы группы' : 'Вопросы группы'}</h4>${rest.map(qbox).join('')}` : ''}${submitHtml(i, 'q')}` }];
+}
+
 function renderCard(ref) {
+  const g = ref.split('|')[2];
+  if (g && g.startsWith('g:')) return renderQGroup(ref, g.slice(2));
   const i = findItem(ref);
   return [i ? { key: 'card:' + ref, cls: 'row card', html: taskView(i, 'card') }
     : { key: 'card-none', cls: 'empty', html: `Задача ${esc(ref)} больше не найдена` }];
@@ -972,12 +1014,12 @@ function renderInbox() {
   if (qOpen && !asked.length) rows.push({ key: 'in-none', cls: 'empty', html: 'Вопросов нет' });
   for (const i of qOpen ? asked : []) {
     const fk = 'in:' + i.tab + '|' + i.id, open = !fold.has(fk);
-    const asks = open ? (i.plan || []).map((p, k) => (p.status === 'wait' && !p.act ? planRow(i, p, k, false, true) : '')).join('') : '';
+    const asks = open ? qGrouped(i, (p) => p.status === 'wait' && !p.act) : '';
     const n = nWait(i), done = (i.plan || []).filter((p) => p.status === 'wait' && !p.act).length - n;
     rows.push({ key: 'in:' + i.tab + ':' + i.id, cls: 'row card inbox' + (open ? '' : ' folded') + (nDraftOf(i, 'q') ? ' dirty' : ''),
       html: `<div class="dhead fold" data-act="fold" data-id="${esc(fk)}" tabindex="0" role="button" aria-expanded="${open}" title="${open ? 'свернуть' : 'развернуть'}">${chev(open)}<span class="id">${esc(i.id)}</span><span class="title grow" title="${esc(i.title)}">${esc(i.title)}</span>
         ${draftTag(i, 'q')}${n ? `<span class="tag wait">Вопросы: ${n}</span>` : ''}${done ? `<span class="tag ok">Отвечено: ${done}</span>` : ''}${cardBtn(i)}</div>
-        ${open ? `${n ? reviewBtn(i) : ''}<ul class="plan">${asks}</ul>${submitHtml(i, 'q')}` : ''}` });
+        ${open ? `${n ? reviewBtn(i) : ''}${asks}${submitHtml(i, 'q')}` : ''}` });
   }
   // просьбы владельца ждут агента, не его — внизу свёрнутой строкой, чтобы видеть неразобранное
   const n = withReq.reduce((s, i) => s + nReq(i), 0);
@@ -1134,6 +1176,8 @@ document.addEventListener('click', async (e) => {
       return (kind === 'act') === !!((i?.plan || [])[+k] || {}).act; };
     for (const k of Object.keys(drafts)) if (k.startsWith(t.dataset.dir + '|') && mine(k)) delete drafts[k];
     if (r.ok) toast(`Зафиксировано: ${r.sent}`);
+  } else if (a === 'qgopen') {   // разбор группы вопросов — вкладкой панели
+    e.stopPropagation(); openCard(t.dataset.ref);
   } else if (a === 'qreview') {
     const i = items().find((x) => x.dir === t.dataset.dir), on = !(i && reviewOn(i));
     drafts[t.dataset.dir + '|review'] = on;
@@ -1320,7 +1364,8 @@ async function pull() {
 function go(v) { view = v; store.set('view', view); if (decodeURIComponent(location.hash.slice(1)) !== v) history.pushState(null, '', '#' + v); render(); scrollTo(0, 0); }
 // имя вкладки карточки: своё короткое (поле short — задаёт владелец), иначе начало названия, иначе id
 function tabName(ref) {
-  const i = findItem(ref), id = ref.split('|')[1];
+  const i = findItem(ref), [, id, g] = ref.split('|');
+  if (g && g.startsWith('g:')) return 'Разбор: ' + (g.length > 22 ? g.slice(2, 22).trimEnd() + '…' : g.slice(2));   // вкладка группы вопросов
   if (!i) return id;
   if (i.short) return i.short;
   const t = String(i.title || id);

@@ -154,6 +154,15 @@ def submit(cfg, args):
     return {'ok': True, 'sent': len(sent) + extra}
 
 
+def set_group(cfg, dir_, name, doc=''):
+    """Группа вопросов задачи: groups {имя: {doc}} — разбор группы открывается в панели вкладкой с живыми вопросами."""
+    def fn(t):
+        g = t.setdefault('groups', {}).setdefault(name, {})
+        if doc:
+            g['doc'] = doc
+    tabs.update_task(cfg, dir_, fn)
+
+
 REVIEW_TEXT = 'Проверить актуальность открытых вопросов'
 
 

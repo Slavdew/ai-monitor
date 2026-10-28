@@ -254,7 +254,14 @@ li.qa .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.05em; col
 .actcmd { display:block; margin:6px 0 } .actcmd .lbl { color:var(--warn); font-weight:600; margin-right:6px }
 /* после «Зафиксировать»: куда написать, чтобы агент увидел ответы */
 .agenthint { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; margin:8px 0 2px; padding:8px 10px; border-radius:8px; background:var(--soft); font-size:13px }
-.agenthint .who { color:var(--fg) } .tag.req { color:var(--acc); border-color:var(--acc) } .tag.doc { color:var(--acc); border-color:var(--acc); border-style:dashed }
+.agenthint .who { color:var(--fg) } .tag.req { color:var(--acc); border-color:var(--acc) } .tag.doc { color:var(--acc); border-color:var(--acc); border-style:dashed; background:none; font:inherit; font-size:12px; cursor:pointer }
+/* группы вопросов: подблок в «Ждут вас» и рамка «Вопрос N» в тексте разбора */
+.qgroup { border:1px dashed var(--line); border-radius:8px; padding:4px 10px; margin:8px 0 }
+.qgh { display:flex; gap:10px; align-items:center; min-height:30px } .qgh .grow { flex:1 }
+.qgfold { border:0; background:none; color:var(--fg); font:inherit; font-weight:600; cursor:pointer; padding:2px 0 }
+.qslot { border:2px solid var(--acc); border-radius:8px; padding:6px 12px; margin:14px 0; background:var(--card); font-size:14px }
+.qslot-h { font-size:11.5px; color:var(--acc); font-weight:700; letter-spacing:.05em; text-transform:uppercase; margin-bottom:2px }
+.qgdoc .md { max-width:none; padding:4px 4px 8px } .qgdoc .md img { max-width:100% }
 .wbadge { display:inline-block; min-width:16px; padding:0 4px; border-radius:8px; background:var(--warn); color:var(--bg); font-size:11px; text-align:center }
 /* вопрос: поле ответа в строку, «↺ проще» справа от него */
 /* вопрос — отдельной плашкой; набранный, но не отправленный ответ — зелёный фон и метка «К отправке» */

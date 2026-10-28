@@ -167,7 +167,8 @@ def parser():
         x.add_argument('--opt', action='append', default=[]); x.add_argument('--force', action='store_true')
         x.add_argument('--act', action='store_true'); x.add_argument('--run', default='')
         x.add_argument('--how', default=''); x.add_argument('--where', default='')
-        x.add_argument('--doc', default='')   # ask: вопросы с вариантами — в файле (qkit), ответ — одной строкой оттуда
+        x.add_argument('--group', default='')   # ask: группа вопросов одного разбора — вместе в «Ждут вас»
+        x.add_argument('--doc', default='')     # ask --group: разбор группы (.md с метками [[q:N]]) — вкладкой в панели
     st = sp('set'); st.add_argument('ref'); st.add_argument('rest', nargs='+')
     bt = sp('batch'); bt.add_argument('ref')
     ak = sp('ack'); ak.add_argument('ref'); ak.add_argument('n', nargs='+')
@@ -177,7 +178,8 @@ def parser():
     ap = sp('api'); ap.add_argument('source', nargs='?'); ap.add_argument('action', nargs='?'); ap.add_argument('pairs', nargs='*')
     sa = sp('stats'); sa.add_argument('--days', type=float, default=7)
     sp('modules')
-    sp('conf').add_argument('key')   # значение настройки (умолчания + личный файл): conf ui.doc_choices
+    sp('conf').add_argument('key')   # значение настройки (умолчания + личный файл): conf ui.theme
+    gp = sp('group'); gp.add_argument('ref'); gp.add_argument('name'); gp.add_argument('--doc', default='')   # разбор группы
     nx = sp('next'); nx.add_argument('--tab'); nx.add_argument('--project'); nx.add_argument('--force', action='store_true')
     rl = sp('release'); rl.add_argument('ref', nargs='?')
     tk = sp('take'); tk.add_argument('ref'); tk.add_argument('--force', action='store_true')
@@ -444,7 +446,7 @@ def _item_fields(pairs):
         k, v = m.group(1), m.group(3)
         if k not in tabs.ITEM_KEYS:
             raise ValueError(f'ключ {k}: у пункта допустимы {", ".join(tabs.ITEM_KEYS)} (поля задачи — set T ключ=… без N)')
-        out[k] = None if v == 'null' or (v == '' and k in ('note', 'section', 'who')) else v
+        out[k] = None if v == 'null' or (v == '' and k in ('note', 'section', 'who', 'group')) else v
     return out
 
 
@@ -528,13 +530,17 @@ def add(cfg, a):
         n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt or ['Сделал', 'Не буду'], extra)
         return f'ok пункт {n}'
     if a.cmd == 'ask' or a.ask:
-        doc = {}
-        if a.doc:   # «ответы в файле»: владелец выбирает в документе, в панель приходит их сводка одним ответом
-            p = a.doc if os.path.isabs(a.doc) else os.path.join(d, a.doc)
-            if not os.path.isfile(p):
-                raise ValueError(f'--doc: файла нет: {p}')
-            doc = {'doc': os.path.normpath(p)}
-        n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt, doc or None)
+        if a.doc and not a.group:
+            raise ValueError('--doc — разбор группы: ask T "вопрос" --group "тема" --doc reviews/разбор.md')
+        doc = ''
+        if a.doc:   # разбор группы: .md, метка [[q:N]] на своей строке — на её месте в панели живой вопрос
+            doc = os.path.normpath(a.doc if os.path.isabs(a.doc) else os.path.join(d, a.doc))
+            if not os.path.isfile(doc):
+                raise ValueError(f'--doc: файла нет: {doc}')
+        n = questions.ask(cfg, d, a.text, a.note or fields.pop('note', '') or '', a.force, a.opt,
+                          {'group': a.group} if a.group else None)
+        if a.group:
+            questions.set_group(cfg, d, a.group, doc)
         rest = {k: v for k, v in fields.items() if k in ('section', 'after', 'who')}
         if rest:
             set_item(cfg, d, n, rest)
@@ -562,6 +568,13 @@ def run(cfg, a):
         return api(cfg, a)
     if a.cmd in ('add', 'ask', 'req', 'act'):
         print(add(cfg, a))
+    elif a.cmd == 'group':   # вопросы в группу — set T N group="тема"; здесь — разбор группы (.md с [[q:N]])
+        d = resolve(cfg, a.ref)
+        doc = os.path.normpath(a.doc if os.path.isabs(a.doc) else os.path.join(d, a.doc)) if a.doc else ''
+        if doc and not os.path.isfile(doc):
+            raise ValueError(f'--doc: файла нет: {doc}')
+        questions.set_group(cfg, d, a.name, doc)
+        print('ok')
     elif a.cmd == 'show':
         show(cfg, resolve(cfg, a.ref), a.all)
     elif a.cmd == 'set':
